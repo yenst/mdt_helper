@@ -266,7 +266,7 @@ function H:UpdateUI()
     local n = #self.pulls
 
     -- Header
-    headerText:SetText("Pull " .. cur .. " / " .. total .. "  |cff888888(" .. done .. " done)|r")
+    headerText:SetText("Pull " .. cur .. " / " .. total .. " |r")
 
     -- Forces bar
     local gained = self.totalForcesGained
