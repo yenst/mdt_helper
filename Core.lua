@@ -9,6 +9,7 @@ H.totalForcesGained = 0
 H.totalForcesRequired = 0
 H.activeDungeon = false
 H.completedCriteria = {}
+H.keyCompleted = false
 H.db = { enabled = true, locked = false }
 
 ------------------------------------------------------------------------
@@ -26,9 +27,12 @@ frame:SetScript("OnEvent", function(self, event, arg1)
 
         frame:RegisterEvent("PLAYER_ENTERING_WORLD")
         frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+        frame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
         frame:UnregisterEvent("ADDON_LOADED")
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         H:CheckInstance()
+    elseif event == "CHALLENGE_MODE_COMPLETED" then
+        H:OnKeyCompleted()
     end
 end)
 
@@ -41,6 +45,7 @@ local prevForces = 0
 
 scenFrame:SetScript("OnEvent", function()
     if not H.activeDungeon then return end
+    if H.keyCompleted then return end
     local ok, numCriteria = pcall(function() return select(3, C_Scenario.GetStepInfo()) end)
     if not ok or not numCriteria then return end
     local bossKilled = false
@@ -69,6 +74,19 @@ scenFrame:SetScript("OnEvent", function()
 end)
 
 ------------------------------------------------------------------------
+-- Key completed — freeze state, mark all pulls done
+------------------------------------------------------------------------
+function H:OnKeyCompleted()
+    self.keyCompleted = true
+    self.totalForcesGained = self.totalForcesRequired
+    for _, pull in ipairs(self.pulls) do
+        pull.completed = true
+    end
+    self.currentPullIdx = #self.pulls
+    if self.UpdateUI then self:UpdateUI() end
+end
+
+------------------------------------------------------------------------
 -- Instance detection
 ------------------------------------------------------------------------
 function H:CheckInstance()
@@ -78,6 +96,7 @@ function H:CheckInstance()
         self:BuildRoute()
     else
         self.activeDungeon = false
+        self.keyCompleted = false
         wipe(self.pulls)
         wipe(self.npcKills)
         self.currentPullIdx = 1
