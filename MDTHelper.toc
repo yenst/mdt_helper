@@ -4,6 +4,7 @@
 ## Author: MDTHelper
 ## Version: 0.2.0
 ## Dependencies: MythicDungeonTools
+## OptionalDeps: MDT_Legacy
 ## SavedVariables: MDTHelperDB
 
 Core.lua
