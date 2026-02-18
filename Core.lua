@@ -145,6 +145,7 @@ function H:BuildRoute()
                             forces = enemyData.count or 0,
                             numClones = 0,
                             isBoss = enemyData.isBoss or false,
+                            displayId = enemyData.displayId,
                         }
                     end
                     for _ in pairs(clones) do
