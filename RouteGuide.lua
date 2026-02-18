@@ -7,7 +7,7 @@ local WIDTH = 240
 local FONT = "Fonts\\FRIZQT__.TTF"
 local ROW_H = 18
 local MOB_ROW_H = 16
-local EXPANDED_TITLE_H = 20
+local EXPANDED_TITLE_H = 4
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -189,33 +189,40 @@ expandedBlock:SetSize(WIDTH - 8, EXPANDED_TITLE_H)
 Bg(expandedBlock, 0.12, 0.1, 0.02, 0.9)
 expandedBlock:Hide()
 
-local expandedTitle = Text(expandedBlock, 11, "LEFT")
-expandedTitle:SetPoint("TOPLEFT", 6, -4)
-expandedTitle:SetTextColor(1, 0.85, 0)
-
 local expandedMobRows = {}
+
+local COL_COUNT_W = 22
+local COL_PCT_W = 46
 
 local function GetExpandedMobRow(i)
     if expandedMobRows[i] then return expandedMobRows[i] end
 
     local row = CreateFrame("Frame", nil, expandedBlock)
-    row:SetSize(WIDTH - 20, MOB_ROW_H)
-    row:SetPoint("TOPLEFT", 8, -(EXPANDED_TITLE_H + (i - 1) * (MOB_ROW_H + 1)))
+    row:SetSize(WIDTH - 16, MOB_ROW_H)
+    row:SetPoint("TOPLEFT", 6, -(EXPANDED_TITLE_H + (i - 1) * (MOB_ROW_H + 1)))
+
+    -- Column 1: count or boss icon
+    row.count = Text(row, 10, "CENTER")
+    row.count:SetPoint("LEFT", 0, 0)
+    row.count:SetWidth(COL_COUNT_W)
+    row.count:SetTextColor(0.7, 0.7, 0.7)
 
     row.skull = row:CreateTexture(nil, "ARTWORK")
     row.skull:SetSize(12, 12)
-    row.skull:SetPoint("LEFT", 1, 0)
+    row.skull:SetPoint("CENTER", row.count, "CENTER")
     row.skull:SetAtlas("UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star")
     row.skull:Hide()
 
+    -- Column 2: name
     row.name = Text(row, 10)
-    row.name:SetPoint("LEFT", 14, 0)
-    row.name:SetPoint("RIGHT", row, "RIGHT", -48, 0)
+    row.name:SetPoint("LEFT", COL_COUNT_W + 2, 0)
+    row.name:SetPoint("RIGHT", row, "RIGHT", -(COL_PCT_W + 2), 0)
     row.name:SetWordWrap(false)
 
+    -- Column 3: % forces
     row.forces = Text(row, 9, "RIGHT")
     row.forces:SetPoint("RIGHT", -2, 0)
-    row.forces:SetWidth(46)
+    row.forces:SetWidth(COL_PCT_W)
     row.forces:SetTextColor(0.5, 0.7, 1)
 
     row:Hide()
@@ -282,42 +289,33 @@ function H:UpdateUI()
     local pull = self.pulls[cur]
     local expandedHeight = EXPANDED_TITLE_H
     if pull then
-        local r, g, b = 1, 0.85, 0
-        if pull.color then
-            r = tonumber(pull.color[1]) or 1
-            g = tonumber(pull.color[2]) or 1
-            b = tonumber(pull.color[3]) or 1
-            if r > 1 or g > 1 or b > 1 then r, g, b = r / 255, g / 255, b / 255 end
-        end
-
-        expandedTitle:SetText("PULL " .. cur .. "  |cffffffff" .. ForcePct(pull.totalForces) .. "|r")
-        expandedTitle:SetTextColor(r, g, b)
-
         local numEnemies = #pull.enemies
         for i = 1, math.max(numEnemies, #expandedMobRows) do
             local row = GetExpandedMobRow(i)
             if i <= numEnemies then
                 local e = pull.enemies[i]
-                local prefix = ""
-                if e.numClones > 1 then prefix = e.numClones .. "x " end
-                row.name:SetText(prefix .. e.name)
                 if e.isBoss then
+                    row.count:Hide()
                     row.skull:Show()
                     row.name:SetTextColor(1, 0.82, 0)
                 else
                     row.skull:Hide()
+                    row.count:SetText(tostring(e.numClones))
+                    row.count:Show()
                     row.name:SetTextColor(0.95, 0.95, 0.95)
                 end
+                row.name:SetText(e.name)
                 if e.forces > 0 then
                     row.forces:SetText(ForcePct(e.forces * e.numClones))
                 else
                     row.forces:SetText("")
                 end
-                row:SetPoint("TOPLEFT", 8, -(EXPANDED_TITLE_H + (i - 1) * (MOB_ROW_H + 1)))
+                row:SetPoint("TOPLEFT", 6, -(EXPANDED_TITLE_H + (i - 1) * (MOB_ROW_H + 1)))
                 row:Show()
             else
                 row:Hide()
                 row.skull:Hide()
+                row.count:Hide()
             end
         end
 
