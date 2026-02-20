@@ -453,6 +453,77 @@ f:SetScript("OnMouseWheel", function(_, delta)
 end)
 
 ------------------------------------------------------------------------
+-- Resize handle (bottom edge)
+------------------------------------------------------------------------
+local MIN_FRAME_HEIGHT = 80
+local MAX_FRAME_HEIGHT = 800
+
+local resizeHandle = CreateFrame("Frame", nil, f)
+resizeHandle:SetSize(WIDTH, 6)
+resizeHandle:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 0)
+resizeHandle:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
+resizeHandle:EnableMouse(true)
+resizeHandle:SetFrameLevel(f:GetFrameLevel() + 10)
+
+local resizeIndicator = resizeHandle:CreateTexture(nil, "OVERLAY")
+resizeIndicator:SetSize(30, 2)
+resizeIndicator:SetPoint("CENTER", resizeHandle, "CENTER", 0, 0)
+resizeIndicator:SetColorTexture(0.5, 0.5, 0.5, 0)
+
+local function UpdateResizeHandleVisibility()
+    if H.db.locked then
+        resizeHandle:EnableMouse(false)
+        resizeIndicator:SetColorTexture(0.5, 0.5, 0.5, 0)
+    else
+        resizeHandle:EnableMouse(true)
+        resizeIndicator:SetColorTexture(0.5, 0.5, 0.5, 0.4)
+    end
+end
+
+resizeHandle:SetScript("OnEnter", function()
+    if not H.db.locked then
+        resizeIndicator:SetColorTexture(0, 0.8, 1, 0.7)
+    end
+end)
+resizeHandle:SetScript("OnLeave", function()
+    if not H.db.locked then
+        resizeIndicator:SetColorTexture(0.5, 0.5, 0.5, 0.4)
+    end
+end)
+
+local isResizing = false
+resizeHandle:SetScript("OnMouseDown", function(_, btn)
+    if btn == "LeftButton" and not H.db.locked then
+        isResizing = true
+        f.resizeStartY = select(2, GetCursorPosition()) / f:GetEffectiveScale()
+        f.resizeStartH = f:GetHeight()
+    end
+end)
+
+resizeHandle:SetScript("OnMouseUp", function()
+    if isResizing then
+        isResizing = false
+        -- Save the list section height as the user's custom height
+        local listTop = H.db.minimized and 26 or 40
+        local customH = f:GetHeight() - listTop - 6
+        if customH >= 40 then
+            H.db.frameHeight = customH
+        end
+    end
+end)
+
+resizeHandle:SetScript("OnUpdate", function()
+    if not isResizing then return end
+    local curY = select(2, GetCursorPosition()) / f:GetEffectiveScale()
+    local delta = f.resizeStartY - curY
+    local newH = math.max(MIN_FRAME_HEIGHT, math.min(f.resizeStartH + delta, MAX_FRAME_HEIGHT))
+    f:SetHeight(newH)
+    local listTop = H.db.minimized and 26 or 40
+    local listH = newH - listTop - 6
+    listSection:SetHeight(math.max(listH, 20))
+end)
+
+------------------------------------------------------------------------
 -- Hover: boost opacity when frame is transparent
 ------------------------------------------------------------------------
 local HOVER_ALPHA = 0.85
@@ -471,7 +542,7 @@ end)
 -- Settings panel
 ------------------------------------------------------------------------
 local settingsFrame = CreateFrame("Frame", "MDTHelperSettings", UIParent, "BackdropTemplate")
-settingsFrame:SetSize(220, 160)
+settingsFrame:SetSize(220, 190)
 settingsFrame:SetPoint("CENTER")
 settingsFrame:SetFrameStrata("DIALOG")
 settingsFrame:SetMovable(true)
@@ -525,7 +596,7 @@ Bg(resetPosBtn, 0.18, 0.18, 0.18, 1)
 local resetPosTxt = resetPosBtn:CreateFontString(nil, "OVERLAY")
 resetPosTxt:SetFont(FONT, 10, "OUTLINE")
 resetPosTxt:SetPoint("CENTER")
-resetPosTxt:SetText("Reset Position")
+resetPosTxt:SetText("Reset Position & Size")
 resetPosTxt:SetTextColor(0.9, 0.9, 0.9)
 
 resetPosBtn:SetScript("OnEnter", function(self)
@@ -536,9 +607,11 @@ resetPosBtn:SetScript("OnLeave", function(self)
 end)
 resetPosBtn:SetScript("OnMouseDown", function()
     H.db.framePoint = nil
+    H.db.frameHeight = nil
     f:ClearAllPoints()
     f:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -200)
-    print("|cff00ccffMDTHelper|r: Position reset to default")
+    H:UpdateUI()
+    print("|cff00ccffMDTHelper|r: Position and size reset to default")
 end)
 
 -- Transparency slider label
@@ -598,6 +671,41 @@ autoImportBtn:SetScript("OnMouseDown", function()
     UpdateAutoImportLabel()
 end)
 
+-- Unlock Frame toggle (allows moving + resizing height)
+local unlockBtn = CreateFrame("Frame", nil, settingsFrame)
+unlockBtn:SetSize(200, 22)
+unlockBtn:SetPoint("TOPLEFT", 10, -138)
+unlockBtn:EnableMouse(true)
+Bg(unlockBtn, 0.18, 0.18, 0.18, 1)
+
+local unlockTxt = unlockBtn:CreateFontString(nil, "OVERLAY")
+unlockTxt:SetFont(FONT, 10, "OUTLINE")
+unlockTxt:SetPoint("CENTER")
+unlockTxt:SetTextColor(0.9, 0.9, 0.9)
+
+local function UpdateUnlockLabel()
+    local state = H.db.locked and "|cff00ff00Locked|r" or "|cffff4444Unlocked|r"
+    unlockTxt:SetText("Frame: " .. state)
+end
+
+unlockBtn:SetScript("OnEnter", function(self)
+    SetBg(self, 0.35, 0.35, 0.35, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Lock / Unlock Frame", 0, 0.8, 1)
+    GameTooltip:AddLine("When unlocked, drag to move and", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("drag bottom edge to resize height", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end)
+unlockBtn:SetScript("OnLeave", function(self)
+    SetBg(self, 0.18, 0.18, 0.18, 1)
+    GameTooltip:Hide()
+end)
+unlockBtn:SetScript("OnMouseDown", function()
+    H.db.locked = not H.db.locked
+    UpdateUnlockLabel()
+    H:UpdateUI()
+end)
+
 function H:ToggleSettings()
     if settingsFrame:IsShown() then
         settingsFrame:Hide()
@@ -605,6 +713,7 @@ function H:ToggleSettings()
         alphaSlider:SetValue(H.db.bgAlpha or 1)
         UpdateAlphaLabel(H.db.bgAlpha or 1)
         UpdateAutoImportLabel()
+        UpdateUnlockLabel()
         settingsFrame:Show()
     end
 end
@@ -849,10 +958,17 @@ function H:_DoUpdateUI()
 
     -- Size the frame to fit
     local listTop = minimized and 26 or 40
-    local maxListH = math.min(yOff, 500)
+    local customH = self.db.frameHeight
+    local maxListH
+    if customH and not minimized then
+        maxListH = customH
+    else
+        maxListH = math.min(yOff, 500)
+    end
     local totalHeight = listTop + maxListH + 6
     f:SetHeight(totalHeight)
     listSection:SetHeight(maxListH)
+    UpdateResizeHandleVisibility()
 
     -- Auto scroll / reset scroll
     if minimized then

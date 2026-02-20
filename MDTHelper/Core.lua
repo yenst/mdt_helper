@@ -15,7 +15,7 @@ H.totalForcesRequired = 0
 H.activeDungeon = false
 H.completedCriteria = {}
 H.keyCompleted = false
-H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1, autoImport = true, autoAdvance = true }
+H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil }
 
 ------------------------------------------------------------------------
 -- Event frame
@@ -32,6 +32,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.bgAlpha == nil then MDTHelperDB.bgAlpha = 1 end
         if MDTHelperDB.autoImport == nil then MDTHelperDB.autoImport = true end
         if MDTHelperDB.autoAdvance == nil then MDTHelperDB.autoAdvance = true end
+        -- frameHeight: nil means auto-size (default behavior)
         H.db = MDTHelperDB
 
         frame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -525,8 +526,9 @@ SlashCmdList["MDTHELPER"] = function(msg)
         print("|cff00ccffMDTHelper|r: Reset pull progress")
     elseif cmd == "pos" then
         H.db.framePoint = nil
+        H.db.frameHeight = nil
         if H.UpdateUI then H:UpdateUI() end
-        print("|cff00ccffMDTHelper|r: Position reset to default")
+        print("|cff00ccffMDTHelper|r: Position and size reset to default")
     elseif cmd == "settings" or cmd == "config" then
         if H.ToggleSettings then H:ToggleSettings() end
     elseif cmd == "share" then
