@@ -61,7 +61,7 @@ end
 ------------------------------------------------------------------------
 local f = CreateFrame("Frame", "MDTHelperGuide", UIParent)
 f:SetSize(WIDTH, 300)
-f:SetPoint("RIGHT", UIParent, "RIGHT", -20, 0)
+f:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -200)
 f:SetFrameStrata("MEDIUM")
 f:SetClampedToScreen(true)
 f:EnableMouse(true)
@@ -75,8 +75,15 @@ f:SetScript("OnMouseDown", function(self, btn)
 end)
 f:SetScript("OnMouseUp", function(self)
     self:StopMovingOrSizing()
-    local p, _, rp, x, y = self:GetPoint()
-    H.db.framePoint = { p, rp, x, y }
+    -- Always normalize to TOPLEFT so height changes grow downward
+    local scale = self:GetEffectiveScale()
+    local uiScale = UIParent:GetEffectiveScale()
+    local left, top = self:GetLeft(), self:GetTop()
+    local x = (left * scale) / uiScale
+    local y = (top * scale) / uiScale - UIParent:GetHeight()
+    self:ClearAllPoints()
+    self:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
+    H.db.framePoint = { "TOPLEFT", "TOPLEFT", x, y }
 end)
 
 ------------------------------------------------------------------------
@@ -210,9 +217,13 @@ local function GetPullRow(i)
         -- Tooltip
         pf:EnableMouse(true)
         pf.mobName = ""
+        pf.mobForces = ""
         pf:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(self.mobName, 1, 1, 1)
+            if self.mobForces ~= "" then
+                GameTooltip:AddLine(self.mobForces, 0.5, 0.7, 1)
+            end
             GameTooltip:Show()
         end)
         pf:SetScript("OnLeave", function()
@@ -223,9 +234,10 @@ local function GetPullRow(i)
         row.portraits[j] = pf
     end
 
-    row.forces = Text(row, 8, "RIGHT")
-    row.forces:SetPoint("RIGHT", -2, 0)
-    row.forces:SetWidth(42)
+    row.cumPct = Text(row, 8, "RIGHT")
+    row.cumPct:SetPoint("RIGHT", -2, 0)
+    row.cumPct:SetWidth(42)
+    row.cumPct:SetTextColor(0.55, 0.55, 0.55)
 
     row.check = Text(row, 9, "CENTER")
     row.check:SetPoint("CENTER", row.num, "CENTER")
@@ -246,11 +258,15 @@ expandedBlock:SetSize(WIDTH - 8, EXPANDED_TITLE_H)
 Bg(expandedBlock, 0.12, 0.1, 0.02, 0.9)
 expandedBlock:Hide()
 
+local expandedCumPct = Text(expandedBlock, 8, "RIGHT")
+expandedCumPct:SetPoint("TOPRIGHT", -2, -(EXPANDED_TITLE_H + (MOB_ROW_H - 8) / 2))
+expandedCumPct:SetWidth(42)
+expandedCumPct:SetTextColor(0.55, 0.55, 0.55)
+
 local expandedMobRows = {}
 
 local PORTRAIT_SIZE = 24
 local COL_COUNT_W = 20
-local COL_PCT_W = 46
 
 local function GetExpandedMobRow(i)
     if expandedMobRows[i] then return expandedMobRows[i] end
@@ -292,20 +308,18 @@ local function GetExpandedMobRow(i)
     -- Name text (shown next to portrait, smaller)
     row.name = Text(row, 9)
     row.name:SetPoint("LEFT", row.portrait, "RIGHT", 4, 0)
-    row.name:SetPoint("RIGHT", row, "RIGHT", -(COL_PCT_W + 2), 0)
+    row.name:SetPoint("RIGHT", row, "RIGHT", -2, 0)
     row.name:SetWordWrap(false)
 
-    -- Column 3: % forces
-    row.forces = Text(row, 9, "RIGHT")
-    row.forces:SetPoint("RIGHT", -2, 0)
-    row.forces:SetWidth(COL_PCT_W)
-    row.forces:SetTextColor(0.5, 0.7, 1)
-
-    -- Tooltip on hover
+    -- Tooltip on hover (includes forces)
     row.mobName = ""
+    row.mobForces = ""
     row:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(self.mobName, 1, 1, 1)
+        if self.mobForces ~= "" then
+            GameTooltip:AddLine(self.mobForces, 0.5, 0.7, 1)
+        end
         GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function()
@@ -391,6 +405,14 @@ function H:_DoUpdateUI()
         barText:SetText("")
     end
 
+    -- Pre-compute cumulative forces for each pull
+    local cumForces = {}
+    local runningForces = 0
+    for i = 1, n do
+        runningForces = runningForces + self.pulls[i].totalForces
+        cumForces[i] = runningForces
+    end
+
     -- Build the expanded block for the current pull
     local pull = self.pulls[cur]
     local expandedHeight = EXPANDED_TITLE_H
@@ -417,9 +439,9 @@ function H:_DoUpdateUI()
                 row.mobName = e.name
                 row.name:SetText(e.name)
                 if e.forces > 0 then
-                    row.forces:SetText(ForcePct(e.forces * e.numClones))
+                    row.mobForces = e.numClones .. "x " .. ForcePct(e.forces) .. " = " .. ForcePct(e.forces * e.numClones)
                 else
-                    row.forces:SetText("")
+                    row.mobForces = ""
                 end
                 row:SetPoint("TOPLEFT", 6, -(EXPANDED_TITLE_H + (i - 1) * (MOB_ROW_H + 1)))
                 row:Show()
@@ -433,6 +455,14 @@ function H:_DoUpdateUI()
         expandedHeight = EXPANDED_TITLE_H + numEnemies * (MOB_ROW_H + 1) + 4
         expandedBlock:SetHeight(expandedHeight)
         expandedBlock:Show()
+
+        -- Cumulative % on expanded block
+        if needed > 0 and cumForces[cur] then
+            expandedCumPct:SetText(string.format("%.1f%%", (cumForces[cur] / needed) * 100))
+            expandedCumPct:Show()
+        else
+            expandedCumPct:Hide()
+        end
     else
         expandedBlock:Hide()
     end
@@ -483,6 +513,11 @@ function H:_DoUpdateUI()
                     local pf = row.portraits[ptIdx]
                     SetPortrait(pf.tex, e.displayId)
                     pf.mobName = e.name
+                    if e.forces > 0 then
+                        pf.mobForces = e.numClones .. "x " .. ForcePct(e.forces) .. " = " .. ForcePct(e.forces * e.numClones)
+                    else
+                        pf.mobForces = ""
+                    end
                     if e.isBoss then
                         pf.border:SetVertexColor(0.9, 0.75, 0.1, 1)
                         pf.count:Hide()
@@ -501,10 +536,12 @@ function H:_DoUpdateUI()
                     row.portraits[j]:Hide()
                 end
 
-                if p.totalForces > 0 then
-                    row.forces:SetText(ForcePct(p.totalForces))
+                -- Cumulative % up to this pull
+                if needed > 0 and cumForces[i] then
+                    row.cumPct:SetText(string.format("%.1f%%", (cumForces[i] / needed) * 100))
+                    row.cumPct:Show()
                 else
-                    row.forces:SetText("")
+                    row.cumPct:Hide()
                 end
 
                 local dimPortraits = false
@@ -513,7 +550,7 @@ function H:_DoUpdateUI()
                     row.num:Hide()
                     row.bossIcon:Hide()
                     row.check:Show()
-                    row.forces:SetTextColor(0.25, 0.25, 0.25)
+                    row.cumPct:SetTextColor(0.25, 0.25, 0.25)
                     dimPortraits = true
                 else
                     SetBg(row, 0.08, 0.08, 0.08, 0.7)
@@ -526,7 +563,7 @@ function H:_DoUpdateUI()
                         row.bossIcon:Hide()
                     end
                     row.num:SetTextColor(pr, pg, pb)
-                    row.forces:SetTextColor(0.4, 0.55, 0.7)
+                    row.cumPct:SetTextColor(0.55, 0.55, 0.55)
                 end
                 -- Dim portraits for completed pulls
                 for j = 1, math.min(ptIdx, MAX_PORTRAITS) do

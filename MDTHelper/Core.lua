@@ -291,13 +291,17 @@ SlashCmdList["MDTHELPER"] = function(msg)
         for _, pull in ipairs(H.pulls) do pull.completed = false end
         if H.UpdateUI then H:UpdateUI() end
         print("|cff00ccffMDTHelper|r: Reset pull progress")
+    elseif cmd == "pos" then
+        H.db.framePoint = nil
+        if H.UpdateUI then H:UpdateUI() end
+        print("|cff00ccffMDTHelper|r: Position reset to default")
     elseif cmd == "status" then
         print("|cff00ccffMDTHelper|r: " .. (H.db.enabled and "Enabled" or "Disabled"))
         print("  Active: " .. tostring(H.activeDungeon))
         print("  Pulls: " .. H:GetCompletedCount() .. "/" .. H:GetPullCount())
         print("  Current: " .. H.currentPullIdx)
     else
-        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|next|prev|reset|status]")
+        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|next|prev|reset|pos|status]")
     end
 end
 
