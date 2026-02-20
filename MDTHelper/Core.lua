@@ -89,12 +89,37 @@ function H:OnKeyCompleted()
 end
 
 ------------------------------------------------------------------------
+-- Sync MDT to the dungeon the player is currently in
+------------------------------------------------------------------------
+function H:SyncMDTDungeon()
+    if not MDT or not MDT.zoneIdToDungeonIdx or not MDT.GetDB then return end
+
+    -- Try zone-based lookup first (covers all dungeons MDT knows about)
+    local zoneId = C_Map.GetBestMapForUnit("player")
+    local dungeonIdx = zoneId and MDT.zoneIdToDungeonIdx[zoneId]
+
+    if not dungeonIdx then return end
+
+    local db = MDT:GetDB()
+    if not db then return end
+
+    if db.currentDungeonIdx ~= dungeonIdx then
+        db.currentDungeonIdx = dungeonIdx
+        -- Also call UpdateToDungeon if available, so MDT fully switches
+        if MDT.UpdateToDungeon then
+            pcall(MDT.UpdateToDungeon, MDT, dungeonIdx)
+        end
+    end
+end
+
+------------------------------------------------------------------------
 -- Instance detection
 ------------------------------------------------------------------------
 function H:CheckInstance()
     local _, instanceType = GetInstanceInfo()
     if instanceType == "party" then
         self.activeDungeon = true
+        self:SyncMDTDungeon()
         self:BuildRoute()
     else
         self.activeDungeon = false
