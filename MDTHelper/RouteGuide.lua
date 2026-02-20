@@ -422,7 +422,7 @@ end)
 -- Settings panel
 ------------------------------------------------------------------------
 local settingsFrame = CreateFrame("Frame", "MDTHelperSettings", UIParent, "BackdropTemplate")
-settingsFrame:SetSize(220, 130)
+settingsFrame:SetSize(220, 160)
 settingsFrame:SetPoint("CENTER")
 settingsFrame:SetFrameStrata("DIALOG")
 settingsFrame:SetMovable(true)
@@ -521,12 +521,41 @@ alphaSlider:SetScript("OnValueChanged", function(self, value)
     ApplyOpacity(value)
 end)
 
+-- Auto-import toggle
+local autoImportBtn = CreateFrame("Frame", nil, settingsFrame)
+autoImportBtn:SetSize(200, 22)
+autoImportBtn:SetPoint("TOPLEFT", 10, -108)
+autoImportBtn:EnableMouse(true)
+Bg(autoImportBtn, 0.18, 0.18, 0.18, 1)
+
+local autoImportTxt = autoImportBtn:CreateFontString(nil, "OVERLAY")
+autoImportTxt:SetFont(FONT, 10, "OUTLINE")
+autoImportTxt:SetPoint("CENTER")
+autoImportTxt:SetTextColor(0.9, 0.9, 0.9)
+
+local function UpdateAutoImportLabel()
+    local state = H.db.autoImport and "|cff00ff00ON|r" or "|cffff4444OFF|r"
+    autoImportTxt:SetText("Auto-Import Leader Route: " .. state)
+end
+
+autoImportBtn:SetScript("OnEnter", function(self)
+    SetBg(self, 0.35, 0.35, 0.35, 1)
+end)
+autoImportBtn:SetScript("OnLeave", function(self)
+    SetBg(self, 0.18, 0.18, 0.18, 1)
+end)
+autoImportBtn:SetScript("OnMouseDown", function()
+    H.db.autoImport = not H.db.autoImport
+    UpdateAutoImportLabel()
+end)
+
 function H:ToggleSettings()
     if settingsFrame:IsShown() then
         settingsFrame:Hide()
     else
         alphaSlider:SetValue(H.db.bgAlpha or 1)
         UpdateAlphaLabel(H.db.bgAlpha or 1)
+        UpdateAutoImportLabel()
         settingsFrame:Show()
     end
 end

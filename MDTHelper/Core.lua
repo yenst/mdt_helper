@@ -10,7 +10,7 @@ H.totalForcesRequired = 0
 H.activeDungeon = false
 H.completedCriteria = {}
 H.keyCompleted = false
-H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1 }
+H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1, autoImport = true }
 
 ------------------------------------------------------------------------
 -- Event frame
@@ -25,6 +25,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.locked == nil then MDTHelperDB.locked = false end
         if MDTHelperDB.minimized == nil then MDTHelperDB.minimized = false end
         if MDTHelperDB.bgAlpha == nil then MDTHelperDB.bgAlpha = 1 end
+        if MDTHelperDB.autoImport == nil then MDTHelperDB.autoImport = true end
         H.db = MDTHelperDB
 
         frame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -32,6 +33,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         frame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
         frame:UnregisterEvent("ADDON_LOADED")
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+        H:HookMDTComm()
         H:CheckInstance()
     elseif event == "CHALLENGE_MODE_COMPLETED" then
         H:OnKeyCompleted()
@@ -404,6 +406,49 @@ function H:CopyRouteString()
 end
 
 ------------------------------------------------------------------------
+-- Auto-import: check if sender is party leader (not ourselves)
+------------------------------------------------------------------------
+function H:IsSenderPartyLeader(sender)
+    local senderName = Ambiguate(sender, "none")
+    if UnitIsGroupLeader("player") and senderName == UnitName("player") then
+        return false
+    end
+    for i = 1, GetNumGroupMembers() - 1 do
+        local unit = IsInRaid() and ("raid" .. i) or ("party" .. i)
+        if UnitName(unit) == senderName and UnitIsGroupLeader(unit) then
+            return true
+        end
+    end
+    return false
+end
+
+------------------------------------------------------------------------
+-- Auto-import: hook MDT comm to receive leader routes
+------------------------------------------------------------------------
+function H:HookMDTComm()
+    if self.commHooked then return end
+    if not MDTcommsObject then return end
+    self.commHooked = true
+
+    local origOnCommReceived = MDTcommsObject.OnCommReceived
+    MDTcommsObject.OnCommReceived = function(obj, prefix, message, distribution, sender)
+        origOnCommReceived(obj, prefix, message, distribution, sender)
+        if prefix ~= "MDTPreset" then return end
+        if not H.db.autoImport then return end
+        if not H:IsSenderPartyLeader(sender) then return end
+
+        local ok, preset = pcall(MDT.StringToTable, MDT, message, false)
+        if not ok or not preset then return end
+        if not MDT:ValidateImportPreset(preset) then return end
+
+        preset.uid = nil
+        MDT:ImportPreset(preset)
+        H:BuildRoute()
+        print("|cff00ccffMDTHelper|r: Auto-imported route from party leader")
+    end
+end
+
+------------------------------------------------------------------------
 -- Navigation
 ------------------------------------------------------------------------
 function H:AdvancePull()
@@ -470,13 +515,16 @@ SlashCmdList["MDTHELPER"] = function(msg)
         H:ShareRoute()
     elseif cmd == "copy" then
         H:CopyRouteString()
+    elseif cmd == "autoimport" then
+        H.db.autoImport = not H.db.autoImport
+        print("|cff00ccffMDTHelper|r: Auto-import leader route " .. (H.db.autoImport and "enabled" or "disabled"))
     elseif cmd == "status" then
         print("|cff00ccffMDTHelper|r: " .. (H.db.enabled and "Enabled" or "Disabled"))
         print("  Active: " .. tostring(H.activeDungeon))
         print("  Pulls: " .. H:GetCompletedCount() .. "/" .. H:GetPullCount())
         print("  Current: " .. H.currentPullIdx)
     else
-        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|next|prev|reset|pos|settings|share|copy|status]")
+        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|next|prev|reset|pos|settings|share|copy|autoimport|status]")
     end
 end
 
