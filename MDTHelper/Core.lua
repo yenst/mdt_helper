@@ -236,6 +236,149 @@ function H:CheckBossAdvance()
 end
 
 ------------------------------------------------------------------------
+-- Share route
+------------------------------------------------------------------------
+function H:ShareRoute()
+    if not MDT or not MDT.GetCurrentPreset or not MDT.TableToString then
+        print("|cff00ccffMDTHelper|r: MDT not loaded")
+        return
+    end
+
+    local distribution = MDT:IsPlayerInGroup()
+    if not distribution then
+        print("|cff00ccffMDTHelper|r: You must be in a group to share")
+        return
+    end
+
+    local preset = MDT:GetCurrentPreset()
+    if not preset then
+        print("|cff00ccffMDTHelper|r: No active preset")
+        return
+    end
+
+    MDT:SetUniqueID(preset)
+    local db = MDT:GetDB()
+    if db then preset.difficulty = db.currentDifficulty end
+
+    local export = MDT:TableToString(preset, false, 5)
+
+    -- Use MDT's registered comm object to send the data
+    local commObj = LibStub and LibStub("AceAddon-3.0"):GetAddon("MDTCommsObject")
+    if commObj and commObj.SendCommMessage then
+        commObj:SendCommMessage("MDTPreset", export, distribution, nil, "BULK")
+    end
+
+    -- Post the clickable chat link (same format MDT uses)
+    local dungeonName = ""
+    if db and db.currentDungeonIdx then
+        if MDT.GetDungeonName then
+            dungeonName = MDT:GetDungeonName(db.currentDungeonIdx, true) or ""
+        elseif MDT.dungeonList then
+            dungeonName = MDT.dungeonList[db.currentDungeonIdx] or ""
+            dungeonName = dungeonName:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+        end
+    end
+    local presetName = preset.text or "Unknown"
+    local name, realm = UnitFullName("player")
+    realm = realm or GetRealmName():gsub("%s+", "")
+    -- MDT uses "+" between name and realm in the chat link, "-" in the cache key
+    name = UnitFullName(name) or name -- re-resolve for correct case (MDT compat)
+    local chatName = name .. "+" .. realm
+    local msg = "[MDT_v2: " .. chatName .. " - " .. dungeonName .. ": " .. presetName .. "]"
+    C_ChatInfo.SendChatMessage(msg, distribution)
+
+    print("|cff00ccffMDTHelper|r: Route shared to " .. strlower(distribution))
+end
+
+function H:CopyRouteString()
+    if not MDT or not MDT.GetCurrentPreset or not MDT.TableToString then
+        print("|cff00ccffMDTHelper|r: MDT not loaded")
+        return
+    end
+
+    local preset = MDT:GetCurrentPreset()
+    if not preset then
+        print("|cff00ccffMDTHelper|r: No active preset")
+        return
+    end
+
+    MDT:SetUniqueID(preset)
+    local db = MDT:GetDB()
+    if db then preset.difficulty = db.currentDifficulty end
+    local export = MDT:TableToString(preset, true, 5)
+
+    -- Show a simple copy dialog
+    if not H.exportFrame then
+        local ef = CreateFrame("Frame", "MDTHelperExport", UIParent, "BackdropTemplate")
+        ef:SetSize(340, 100)
+        ef:SetPoint("CENTER")
+        ef:SetFrameStrata("DIALOG")
+        ef:SetMovable(true)
+        ef:EnableMouse(true)
+        ef:SetClampedToScreen(true)
+        ef:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        ef:SetBackdropColor(0.06, 0.06, 0.06, 0.95)
+        ef:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+        ef:SetScript("OnMouseDown", function(self, btn)
+            if btn == "LeftButton" then self:StartMoving() end
+        end)
+        ef:SetScript("OnMouseUp", function(self) self:StopMovingOrSizing() end)
+
+        local title = ef:CreateFontString(nil, "OVERLAY")
+        title:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+        title:SetPoint("TOPLEFT", 10, -10)
+        title:SetTextColor(0, 0.8, 1)
+        title:SetText("MDTHelper - Copy Route String")
+
+        local closeBtn = CreateFrame("Frame", nil, ef)
+        closeBtn:SetSize(16, 16)
+        closeBtn:SetPoint("TOPRIGHT", -6, -6)
+        closeBtn:EnableMouse(true)
+        local closeTxt = closeBtn:CreateFontString(nil, "OVERLAY")
+        closeTxt:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+        closeTxt:SetPoint("CENTER")
+        closeTxt:SetText("x")
+        closeTxt:SetTextColor(0.6, 0.6, 0.6)
+        closeBtn:SetScript("OnEnter", function() closeTxt:SetTextColor(1, 0.3, 0.3) end)
+        closeBtn:SetScript("OnLeave", function() closeTxt:SetTextColor(0.6, 0.6, 0.6) end)
+        closeBtn:SetScript("OnMouseDown", function() ef:Hide() end)
+
+        local editBox = CreateFrame("EditBox", nil, ef, "BackdropTemplate")
+        editBox:SetSize(320, 24)
+        editBox:SetPoint("TOPLEFT", 10, -34)
+        editBox:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+        editBox:SetAutoFocus(true)
+        editBox:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        editBox:SetBackdropColor(0.02, 0.02, 0.02, 1)
+        editBox:SetBackdropBorderColor(0.2, 0.2, 0.2, 1)
+        editBox:SetTextInsets(4, 4, 0, 0)
+        editBox:SetScript("OnEscapePressed", function() ef:Hide() end)
+
+        local hint = ef:CreateFontString(nil, "OVERLAY")
+        hint:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+        hint:SetPoint("TOPLEFT", 10, -64)
+        hint:SetTextColor(0.5, 0.5, 0.5)
+        hint:SetText("Ctrl+C to copy, Esc to close")
+
+        ef.editBox = editBox
+        H.exportFrame = ef
+    end
+
+    H.exportFrame.editBox:SetText(export)
+    H.exportFrame:Show()
+    H.exportFrame.editBox:SetFocus()
+    H.exportFrame.editBox:HighlightText()
+end
+
+------------------------------------------------------------------------
 -- Navigation
 ------------------------------------------------------------------------
 function H:AdvancePull()
@@ -298,13 +441,17 @@ SlashCmdList["MDTHELPER"] = function(msg)
         print("|cff00ccffMDTHelper|r: Position reset to default")
     elseif cmd == "settings" or cmd == "config" then
         if H.ToggleSettings then H:ToggleSettings() end
+    elseif cmd == "share" then
+        H:ShareRoute()
+    elseif cmd == "copy" then
+        H:CopyRouteString()
     elseif cmd == "status" then
         print("|cff00ccffMDTHelper|r: " .. (H.db.enabled and "Enabled" or "Disabled"))
         print("  Active: " .. tostring(H.activeDungeon))
         print("  Pulls: " .. H:GetCompletedCount() .. "/" .. H:GetPullCount())
         print("  Current: " .. H.currentPullIdx)
     else
-        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|next|prev|reset|pos|settings|status]")
+        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|next|prev|reset|pos|settings|share|copy|status]")
     end
 end
 

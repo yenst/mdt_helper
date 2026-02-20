@@ -144,6 +144,30 @@ local function NavBtn(parent, label, ox)
     return b
 end
 
+local shareBtn = NavBtn(headerBg, "S", -76)
+shareBtn:ClearAllPoints()
+shareBtn:SetPoint("TOPLEFT", headerBg, "TOPLEFT", 4, -3)
+shareBtn:SetScript("OnEnter", function(s)
+    SetBg(s, 0.35, 0.35, 0.35, 1)
+    GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
+    GameTooltip:SetText("Share Route", 0, 0.8, 1)
+    GameTooltip:AddLine("Left-click: Send to group", 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("Right-click: Copy export string", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end)
+shareBtn:SetScript("OnLeave", function(s)
+    SetBg(s, 0.18, 0.18, 0.18, 1)
+    GameTooltip:Hide()
+end)
+shareBtn:SetScript("OnMouseDown", function(_, btn)
+    if btn == "LeftButton" then
+        H:ShareRoute()
+    elseif btn == "RightButton" then
+        H:CopyRouteString()
+    end
+end)
+shareBtn.label:SetTextColor(0.3, 0.8, 0.3)
+
 local minBtn = NavBtn(headerBg, "-", -52)
 minBtn:SetScript("OnMouseDown", function()
     H.db.minimized = not H.db.minimized
