@@ -430,6 +430,7 @@ function H:HookMDTComm()
     if not MDTcommsObject then return end
     self.commHooked = true
 
+    -- Hook comm for auto-import from party leader
     local origOnCommReceived = MDTcommsObject.OnCommReceived
     MDTcommsObject.OnCommReceived = function(obj, prefix, message, distribution, sender)
         origOnCommReceived(obj, prefix, message, distribution, sender)
@@ -445,6 +446,15 @@ function H:HookMDTComm()
         MDT:ImportPreset(preset)
         H:BuildRoute()
         print("|cff00ccffMDTHelper|r: Auto-imported route from party leader")
+    end
+
+    -- Hook MDT preset changes so any import/switch rebuilds our route
+    if MDT and MDT.UpdatePresetDropDown then
+        hooksecurefunc(MDT, "UpdatePresetDropDown", function()
+            if H.activeDungeon then
+                H:BuildRoute()
+            end
+        end)
     end
 end
 
