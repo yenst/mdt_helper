@@ -19,8 +19,36 @@ local function Bg(frame, r, g, b, a)
     frame._bg = t
 end
 
+-- Track all background textures so we can fade them with the opacity slider
+local bgTextures = {} -- { {tex, r, g, b, a}, ... }
+local currentOpacity = 1
+
 local function SetBg(frame, r, g, b, a)
-    if frame._bg then frame._bg:SetColorTexture(r, g, b, a) end
+    if not frame._bg then return end
+    frame._bg:SetColorTexture(r, g, b, a * currentOpacity)
+    -- Update tracked base values if registered
+    if frame._bgIdx then
+        local info = bgTextures[frame._bgIdx]
+        info.r, info.g, info.b, info.a = r, g, b, a
+    end
+end
+
+local function RegisterBg(frame, r, g, b, a)
+    if frame._bg then
+        bgTextures[#bgTextures + 1] = { tex = frame._bg, r = r, g = g, b = b, a = a }
+        frame._bgIdx = #bgTextures
+    end
+end
+
+local function RegisterTex(tex, r, g, b, a)
+    bgTextures[#bgTextures + 1] = { tex = tex, r = r, g = g, b = b, a = a }
+end
+
+local function ApplyOpacity(alpha)
+    currentOpacity = alpha
+    for _, info in ipairs(bgTextures) do
+        info.tex:SetColorTexture(info.r, info.g, info.b, info.a * alpha)
+    end
 end
 
 local function Text(parent, size, justify)
@@ -69,6 +97,7 @@ f:SetMovable(true)
 f:SetUserPlaced(false)
 f:Hide()
 Bg(f, 0.04, 0.04, 0.04, 0.92)
+RegisterBg(f, 0.04, 0.04, 0.04, 0.92)
 
 f:SetScript("OnMouseDown", function(self, btn)
     if btn == "LeftButton" and not H.db.locked then self:StartMoving() end
@@ -93,6 +122,7 @@ local headerBg = CreateFrame("Frame", nil, f)
 headerBg:SetSize(WIDTH, 24)
 headerBg:SetPoint("TOPLEFT", 0, 0)
 Bg(headerBg, 0.08, 0.08, 0.08, 1)
+RegisterBg(headerBg, 0.08, 0.08, 0.08, 1)
 
 local headerText = Text(headerBg, 11, "CENTER")
 headerText:SetPoint("CENTER")
@@ -104,6 +134,7 @@ local function NavBtn(parent, label, ox)
     b:SetPoint("TOPRIGHT", parent, "TOPRIGHT", ox, -3)
     b:EnableMouse(true)
     Bg(b, 0.18, 0.18, 0.18, 1)
+    RegisterBg(b, 0.18, 0.18, 0.18, 1)
     local t = Text(b, 10, "CENTER")
     t:SetPoint("CENTER")
     t:SetText(label)
@@ -131,11 +162,13 @@ local barFrame = CreateFrame("Frame", nil, f)
 barFrame:SetSize(WIDTH - 8, 10)
 barFrame:SetPoint("TOPLEFT", 4, -26)
 Bg(barFrame, 0.1, 0.1, 0.1, 1)
+RegisterBg(barFrame, 0.1, 0.1, 0.1, 1)
 
 local barFill = barFrame:CreateTexture(nil, "ARTWORK", nil, 1)
 barFill:SetPoint("TOPLEFT")
 barFill:SetSize(1, 10)
 barFill:SetColorTexture(0.2, 0.55, 1, 1)
+RegisterTex(barFill, 0.2, 0.55, 1, 1)
 
 local barText = Text(barFrame, 8, "CENTER")
 barText:SetPoint("CENTER")
@@ -167,6 +200,7 @@ local function GetPullRow(i)
     local row = CreateFrame("Frame", nil, listContent)
     row:SetSize(WIDTH - 8, ROW_H)
     Bg(row, 0.08, 0.08, 0.08, 0.7)
+    RegisterBg(row, 0.08, 0.08, 0.08, 0.7)
 
     row.num = Text(row, 9, "CENTER")
     row.num:SetPoint("LEFT", 2, 0)
@@ -256,6 +290,7 @@ end
 local expandedBlock = CreateFrame("Frame", nil, listContent)
 expandedBlock:SetSize(WIDTH - 8, EXPANDED_TITLE_H)
 Bg(expandedBlock, 0.12, 0.1, 0.02, 0.9)
+RegisterBg(expandedBlock, 0.12, 0.1, 0.02, 0.9)
 expandedBlock:Hide()
 
 local expandedCumPct = Text(expandedBlock, 8, "RIGHT")
@@ -345,6 +380,134 @@ f:SetScript("OnMouseWheel", function(_, delta)
 end)
 
 ------------------------------------------------------------------------
+-- Hover: boost opacity when frame is transparent
+------------------------------------------------------------------------
+local HOVER_ALPHA = 0.85
+
+f:SetScript("OnEnter", function()
+    local alpha = H.db.bgAlpha or 1
+    if alpha < HOVER_ALPHA then
+        ApplyOpacity(HOVER_ALPHA)
+    end
+end)
+f:SetScript("OnLeave", function()
+    ApplyOpacity(H.db.bgAlpha or 1)
+end)
+
+------------------------------------------------------------------------
+-- Settings panel
+------------------------------------------------------------------------
+local settingsFrame = CreateFrame("Frame", "MDTHelperSettings", UIParent, "BackdropTemplate")
+settingsFrame:SetSize(220, 130)
+settingsFrame:SetPoint("CENTER")
+settingsFrame:SetFrameStrata("DIALOG")
+settingsFrame:SetMovable(true)
+settingsFrame:EnableMouse(true)
+settingsFrame:SetClampedToScreen(true)
+settingsFrame:Hide()
+
+settingsFrame:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Buttons\\WHITE8X8",
+    edgeSize = 1,
+})
+settingsFrame:SetBackdropColor(0.06, 0.06, 0.06, 0.95)
+settingsFrame:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+
+settingsFrame:SetScript("OnMouseDown", function(self, btn)
+    if btn == "LeftButton" then self:StartMoving() end
+end)
+settingsFrame:SetScript("OnMouseUp", function(self)
+    self:StopMovingOrSizing()
+end)
+
+-- Title
+local settingsTitle = settingsFrame:CreateFontString(nil, "OVERLAY")
+settingsTitle:SetFont(FONT, 11, "OUTLINE")
+settingsTitle:SetPoint("TOPLEFT", 10, -10)
+settingsTitle:SetTextColor(0, 0.8, 1)
+settingsTitle:SetText("MDTHelper Settings")
+
+-- Close button
+local closeBtn = CreateFrame("Frame", nil, settingsFrame)
+closeBtn:SetSize(16, 16)
+closeBtn:SetPoint("TOPRIGHT", -6, -6)
+closeBtn:EnableMouse(true)
+local closeTxt = closeBtn:CreateFontString(nil, "OVERLAY")
+closeTxt:SetFont(FONT, 12, "OUTLINE")
+closeTxt:SetPoint("CENTER")
+closeTxt:SetText("x")
+closeTxt:SetTextColor(0.6, 0.6, 0.6)
+closeBtn:SetScript("OnEnter", function() closeTxt:SetTextColor(1, 0.3, 0.3) end)
+closeBtn:SetScript("OnLeave", function() closeTxt:SetTextColor(0.6, 0.6, 0.6) end)
+closeBtn:SetScript("OnMouseDown", function() settingsFrame:Hide() end)
+
+-- Reset Position button
+local resetPosBtn = CreateFrame("Frame", nil, settingsFrame)
+resetPosBtn:SetSize(200, 22)
+resetPosBtn:SetPoint("TOPLEFT", 10, -32)
+resetPosBtn:EnableMouse(true)
+Bg(resetPosBtn, 0.18, 0.18, 0.18, 1)
+
+local resetPosTxt = resetPosBtn:CreateFontString(nil, "OVERLAY")
+resetPosTxt:SetFont(FONT, 10, "OUTLINE")
+resetPosTxt:SetPoint("CENTER")
+resetPosTxt:SetText("Reset Position")
+resetPosTxt:SetTextColor(0.9, 0.9, 0.9)
+
+resetPosBtn:SetScript("OnEnter", function(self)
+    SetBg(self, 0.35, 0.35, 0.35, 1)
+end)
+resetPosBtn:SetScript("OnLeave", function(self)
+    SetBg(self, 0.18, 0.18, 0.18, 1)
+end)
+resetPosBtn:SetScript("OnMouseDown", function()
+    H.db.framePoint = nil
+    f:ClearAllPoints()
+    f:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -200)
+    print("|cff00ccffMDTHelper|r: Position reset to default")
+end)
+
+-- Transparency slider label
+local alphaLabel = settingsFrame:CreateFontString(nil, "OVERLAY")
+alphaLabel:SetFont(FONT, 9, "OUTLINE")
+alphaLabel:SetPoint("TOPLEFT", 10, -62)
+alphaLabel:SetTextColor(0.7, 0.7, 0.7)
+
+-- Transparency slider
+local alphaSlider = CreateFrame("Slider", "MDTHelperAlphaSlider", settingsFrame, "OptionsSliderTemplate")
+alphaSlider:SetSize(200, 16)
+alphaSlider:SetPoint("TOPLEFT", 10, -80)
+alphaSlider:SetMinMaxValues(0.1, 1.0)
+alphaSlider:SetValueStep(0.05)
+alphaSlider:SetObeyStepOnDrag(true)
+
+-- Style the slider text
+alphaSlider.Low:SetText("10%")
+alphaSlider.High:SetText("100%")
+alphaSlider.Text:SetText("")
+
+local function UpdateAlphaLabel(val)
+    alphaLabel:SetText("Opacity: " .. math.floor(val * 100 + 0.5) .. "%")
+end
+
+alphaSlider:SetScript("OnValueChanged", function(self, value)
+    H.db.bgAlpha = value
+    UpdateAlphaLabel(value)
+    ApplyOpacity(value)
+end)
+
+function H:ToggleSettings()
+    if settingsFrame:IsShown() then
+        settingsFrame:Hide()
+    else
+        alphaSlider:SetValue(H.db.bgAlpha or 1)
+        UpdateAlphaLabel(H.db.bgAlpha or 1)
+        settingsFrame:Show()
+    end
+end
+
+------------------------------------------------------------------------
 -- Update UI
 ------------------------------------------------------------------------
 function H:UpdateUI()
@@ -367,6 +530,7 @@ function H:_DoUpdateUI()
         return
     end
     f:Show()
+    ApplyOpacity(self.db.bgAlpha or 1)
 
     local total = self:GetPullCount()
     local cur = self.currentPullIdx

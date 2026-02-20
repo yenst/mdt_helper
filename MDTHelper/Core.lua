@@ -10,7 +10,7 @@ H.totalForcesRequired = 0
 H.activeDungeon = false
 H.completedCriteria = {}
 H.keyCompleted = false
-H.db = { enabled = true, locked = false, minimized = false }
+H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1 }
 
 ------------------------------------------------------------------------
 -- Event frame
@@ -24,6 +24,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.enabled == nil then MDTHelperDB.enabled = true end
         if MDTHelperDB.locked == nil then MDTHelperDB.locked = false end
         if MDTHelperDB.minimized == nil then MDTHelperDB.minimized = false end
+        if MDTHelperDB.bgAlpha == nil then MDTHelperDB.bgAlpha = 1 end
         H.db = MDTHelperDB
 
         frame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -295,13 +296,15 @@ SlashCmdList["MDTHELPER"] = function(msg)
         H.db.framePoint = nil
         if H.UpdateUI then H:UpdateUI() end
         print("|cff00ccffMDTHelper|r: Position reset to default")
+    elseif cmd == "settings" or cmd == "config" then
+        if H.ToggleSettings then H:ToggleSettings() end
     elseif cmd == "status" then
         print("|cff00ccffMDTHelper|r: " .. (H.db.enabled and "Enabled" or "Disabled"))
         print("  Active: " .. tostring(H.activeDungeon))
         print("  Pulls: " .. H:GetCompletedCount() .. "/" .. H:GetPullCount())
         print("  Current: " .. H.currentPullIdx)
     else
-        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|next|prev|reset|pos|status]")
+        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|next|prev|reset|pos|settings|status]")
     end
 end
 
