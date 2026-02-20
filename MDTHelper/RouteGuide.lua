@@ -100,10 +100,17 @@ local function NavBtn(parent, label, ox)
     local t = Text(b, 10, "CENTER")
     t:SetPoint("CENTER")
     t:SetText(label)
+    b.label = t
     b:SetScript("OnEnter", function(s) SetBg(s, 0.35, 0.35, 0.35, 1) end)
     b:SetScript("OnLeave", function(s) SetBg(s, 0.18, 0.18, 0.18, 1) end)
     return b
 end
+
+local minBtn = NavBtn(headerBg, "-", -52)
+minBtn:SetScript("OnMouseDown", function()
+    H.db.minimized = not H.db.minimized
+    H:UpdateUI()
+end)
 
 local prevBtn = NavBtn(headerBg, "<", -28)
 prevBtn:SetScript("OnMouseDown", function() H:RetreatPull() end)
@@ -341,7 +348,6 @@ function H:_DoUpdateUI()
         f:SetPoint(p[1], UIParent, p[2], p[3], p[4])
     end
 
-
     if not self.db or not self.db.enabled or not self.activeDungeon or #self.pulls == 0 then
         f:Hide()
         return
@@ -349,14 +355,26 @@ function H:_DoUpdateUI()
     f:Show()
 
     local total = self:GetPullCount()
-    local done = self:GetCompletedCount()
     local cur = self.currentPullIdx
     local n = #self.pulls
+    local minimized = self.db.minimized
+
+    -- Update minimize button label
+    minBtn.label:SetText(minimized and "+" or "-")
 
     -- Header
     headerText:SetText("Pull " .. cur .. " / " .. total .. " |r")
 
-    -- Forces bar
+    -- Forces bar — hide when minimized
+    if minimized then
+        barFrame:Hide()
+        listSection:SetPoint("TOPLEFT", 0, -26)
+    else
+        barFrame:Show()
+        listSection:SetPoint("TOPLEFT", 0, -40)
+    end
+
+    -- Forces bar values (update even if hidden, so it's ready when expanded)
     local gained = self.totalForcesGained
     local needed = self.totalForcesRequired
     if needed <= 0 then
@@ -419,12 +437,23 @@ function H:_DoUpdateUI()
         expandedBlock:Hide()
     end
 
-    -- Layout all pulls in the list, inserting expanded block at current pull
+    -- Determine which pulls to show
+    -- In minimized mode: only current pull (expanded) + next pull (compact)
+    -- In full mode: all pulls
+    local showPull = {}
+    if minimized then
+        showPull[cur] = true
+        if cur + 1 <= n then showPull[cur + 1] = true end
+    else
+        for i = 1, n do showPull[i] = true end
+    end
+
+    -- Layout pulls in the list
     local yOff = 0
 
     for i = 1, math.max(n, #pullRows) do
         local row = GetPullRow(i)
-        if i <= n then
+        if i <= n and showPull[i] then
             local p = self.pulls[i]
 
             if i == cur then
@@ -515,29 +544,35 @@ function H:_DoUpdateUI()
     listContent:SetHeight(math.max(yOff, 1))
 
     -- Size the frame to fit
+    local listTop = minimized and 26 or 40
     local maxListH = math.min(yOff, 500)
-    local totalHeight = 40 + maxListH + 6
+    local totalHeight = listTop + maxListH + 6
     f:SetHeight(totalHeight)
     listSection:SetHeight(maxListH)
 
-    -- Auto scroll to keep current pull visible
-    local contentH = yOff
-    local viewH = listSection:GetHeight()
-    if contentH > viewH then
-        -- Find the Y offset of the expanded block
-        local curY = 0
-        for i = 1, cur - 1 do
-            if self.pulls[i] then
-                curY = curY + ROW_H + 1
-            end
-        end
-        -- Center the expanded block in view if possible
-        local tgt = math.max(0, curY - 40)
-        local mx = math.max(0, contentH - viewH)
-        scrollOffset = math.min(tgt, mx)
-        listContent:SetPoint("TOPLEFT", 4, scrollOffset)
-    else
+    -- Auto scroll / reset scroll
+    if minimized then
         scrollOffset = 0
         listContent:SetPoint("TOPLEFT", 4, 0)
+    else
+        local contentH = yOff
+        local viewH = listSection:GetHeight()
+        if contentH > viewH then
+            -- Find the Y offset of the expanded block
+            local curY = 0
+            for i = 1, cur - 1 do
+                if self.pulls[i] then
+                    curY = curY + ROW_H + 1
+                end
+            end
+            -- Center the expanded block in view if possible
+            local tgt = math.max(0, curY - 40)
+            local mx = math.max(0, contentH - viewH)
+            scrollOffset = math.min(tgt, mx)
+            listContent:SetPoint("TOPLEFT", 4, scrollOffset)
+        else
+            scrollOffset = 0
+            listContent:SetPoint("TOPLEFT", 4, 0)
+        end
     end
 end

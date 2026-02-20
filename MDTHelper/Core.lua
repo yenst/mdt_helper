@@ -10,7 +10,7 @@ H.totalForcesRequired = 0
 H.activeDungeon = false
 H.completedCriteria = {}
 H.keyCompleted = false
-H.db = { enabled = true, locked = false }
+H.db = { enabled = true, locked = false, minimized = false }
 
 ------------------------------------------------------------------------
 -- Event frame
@@ -23,6 +23,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         MDTHelperDB = MDTHelperDB or {}
         if MDTHelperDB.enabled == nil then MDTHelperDB.enabled = true end
         if MDTHelperDB.locked == nil then MDTHelperDB.locked = false end
+        if MDTHelperDB.minimized == nil then MDTHelperDB.minimized = false end
         H.db = MDTHelperDB
 
         frame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -276,6 +277,10 @@ SlashCmdList["MDTHELPER"] = function(msg)
     elseif cmd == "lock" then
         H.db.locked = not H.db.locked
         print("|cff00ccffMDTHelper|r: Frame " .. (H.db.locked and "locked" or "unlocked"))
+    elseif cmd == "min" then
+        H.db.minimized = not H.db.minimized
+        if H.UpdateUI then H:UpdateUI() end
+        print("|cff00ccffMDTHelper|r: " .. (H.db.minimized and "Minimized" or "Expanded"))
     elseif cmd == "next" then
         H:AdvancePull()
     elseif cmd == "prev" then
@@ -292,7 +297,7 @@ SlashCmdList["MDTHELPER"] = function(msg)
         print("  Pulls: " .. H:GetCompletedCount() .. "/" .. H:GetPullCount())
         print("  Current: " .. H.currentPullIdx)
     else
-        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|next|prev|reset|status]")
+        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|next|prev|reset|status]")
     end
 end
 
