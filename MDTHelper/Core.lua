@@ -1,5 +1,10 @@
 local AddonName, NS = ...
 
+-- Keybinding display names (must be globals for Blizzard Key Bindings UI)
+BINDING_HEADER_MDTHELPER = "MDT Helper"
+BINDING_NAME_MDTHELPER_NEXT_PULL = "Next Pull"
+BINDING_NAME_MDTHELPER_PREV_PULL = "Previous Pull"
+
 local H = NS
 H.pulls = {}
 H.npcIdToEnemyInfo = {}
@@ -10,7 +15,7 @@ H.totalForcesRequired = 0
 H.activeDungeon = false
 H.completedCriteria = {}
 H.keyCompleted = false
-H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1, autoImport = true }
+H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1, autoImport = true, autoAdvance = true }
 
 ------------------------------------------------------------------------
 -- Event frame
@@ -26,6 +31,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.minimized == nil then MDTHelperDB.minimized = false end
         if MDTHelperDB.bgAlpha == nil then MDTHelperDB.bgAlpha = 1 end
         if MDTHelperDB.autoImport == nil then MDTHelperDB.autoImport = true end
+        if MDTHelperDB.autoAdvance == nil then MDTHelperDB.autoAdvance = true end
         H.db = MDTHelperDB
 
         frame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -223,6 +229,7 @@ end
 H.pullForcesAccum = 0
 
 function H:CheckAutoAdvance(oldForces, newForces)
+    if not self.db.autoAdvance then return end
     if oldForces == 0 and newForces > 0 then
         -- First update of the run, set baseline
         self.pullForcesAccum = 0
@@ -251,6 +258,7 @@ end
 -- Auto-advance boss pulls
 ------------------------------------------------------------------------
 function H:CheckBossAdvance()
+    if not self.db.autoAdvance then return end
     local pull = self.pulls[self.currentPullIdx]
     if not pull then return end
     if pull.hasBoss then

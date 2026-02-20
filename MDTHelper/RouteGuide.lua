@@ -187,6 +187,36 @@ refreshBtn:SetScript("OnMouseDown", function()
 end)
 refreshBtn.label:SetTextColor(0.8, 0.7, 0.3)
 
+local autoBtn = NavBtn(headerBg, "A", -76)
+autoBtn:ClearAllPoints()
+autoBtn:SetPoint("LEFT", refreshBtn, "RIGHT", 2, 0)
+local function UpdateAutoBtnColor()
+    if H.db.autoAdvance then
+        autoBtn.label:SetTextColor(0.3, 1, 0.3)
+    else
+        autoBtn.label:SetTextColor(1, 0.3, 0.3)
+    end
+end
+UpdateAutoBtnColor()
+autoBtn:SetScript("OnEnter", function(s)
+    SetBg(s, 0.35, 0.35, 0.35, 1)
+    GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
+    local state = H.db.autoAdvance and "|cff00ff00ON|r" or "|cffff4444OFF|r"
+    GameTooltip:SetText("Auto-Advance: " .. state, 0, 0.8, 1)
+    GameTooltip:AddLine("Toggle automatic pull tracking", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end)
+autoBtn:SetScript("OnLeave", function(s)
+    SetBg(s, 0.18, 0.18, 0.18, 1)
+    GameTooltip:Hide()
+end)
+autoBtn:SetScript("OnMouseDown", function()
+    H.db.autoAdvance = not H.db.autoAdvance
+    UpdateAutoBtnColor()
+    local state = H.db.autoAdvance and "enabled" or "disabled"
+    print("|cff00ccffMDTHelper|r: Auto-advance " .. state)
+end)
+
 local minBtn = NavBtn(headerBg, "-", -52)
 minBtn:SetScript("OnMouseDown", function()
     H.db.minimized = not H.db.minimized
@@ -603,6 +633,7 @@ function H:_DoUpdateUI()
     end
     f:Show()
     ApplyOpacity(self.db.bgAlpha or 1)
+    UpdateAutoBtnColor()
 
     local total = self:GetPullCount()
     local cur = self.currentPullIdx

@@ -1,0 +1,8 @@
+<Bindings>
+  <Binding name="MDTHELPER_NEXT_PULL" category="MDTHelper" header="MDTHELPER">
+    MDTHelper:AdvancePull()
+  </Binding>
+  <Binding name="MDTHELPER_PREV_PULL" category="MDTHelper">
+    MDTHelper:RetreatPull()
+  </Binding>
+</Bindings>
