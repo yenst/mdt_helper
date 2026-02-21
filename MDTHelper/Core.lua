@@ -571,7 +571,7 @@ SlashCmdList["MDTHELPER"] = function(msg)
         if guide then
             guide:SetScale(1)
             guide:ClearAllPoints()
-            guide:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -200)
+            guide:SetPoint("TOPLEFT", UIParent, "TOPLEFT", UIParent:GetWidth() - 260, -200)
         end
         if H.UpdateUI then H:UpdateUI() end
         print("|cff00ccffMDTHelper|r: Position and size reset to default")

@@ -89,27 +89,51 @@ end
 ------------------------------------------------------------------------
 local f = CreateFrame("Frame", "MDTHelperGuide", UIParent)
 f:SetSize(WIDTH, 300)
-f:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -200)
+f:SetPoint("TOPLEFT", UIParent, "TOPLEFT", UIParent:GetWidth() - WIDTH - 20, -200)
 f:SetFrameStrata("MEDIUM")
-f:SetClampedToScreen(true)
 f:EnableMouse(true)
-f:SetMovable(true)
-f:SetUserPlaced(false)
 f:Hide()
 Bg(f, 0.04, 0.04, 0.04, 0.92)
 RegisterBg(f, 0.04, 0.04, 0.04, 0.92)
 
-f:SetScript("OnMouseDown", function(self, btn)
-    if btn == "LeftButton" and not H.db.locked then self:StartMoving() end
-end)
-f:SetScript("OnMouseUp", function(self)
-    if H.db.locked then return end
-    self:StopMovingOrSizing()
-    -- StopMovingOrSizing re-anchors to the nearest point.
-    -- Just read back whatever WoW computed and save it.
-    local point, _, relPoint, x, y = self:GetPoint()
-    H.db.framePoint = { point, relPoint, x, y }
-end)
+do
+    local isDragging = false
+    local dragStartX, dragStartY, frameStartX, frameStartY
+
+    f:SetScript("OnMouseDown", function(self, btn)
+        if btn == "LeftButton" and not H.db.locked then
+            isDragging = true
+            local es = self:GetEffectiveScale()
+            dragStartX, dragStartY = GetCursorPosition()
+            dragStartX = dragStartX / es
+            dragStartY = dragStartY / es
+            -- Read current TOPLEFT offset
+            local _, _, _, ox, oy = self:GetPoint()
+            frameStartX = ox or 0
+            frameStartY = oy or 0
+        end
+    end)
+
+    f:SetScript("OnMouseUp", function(self)
+        if not isDragging then return end
+        isDragging = false
+        local _, _, _, x, y = self:GetPoint()
+        H.db.framePoint = { "TOPLEFT", "TOPLEFT", x, y }
+    end)
+
+    local dragUpdate = CreateFrame("Frame")
+    dragUpdate:SetScript("OnUpdate", function()
+        if not isDragging then return end
+        local es = f:GetEffectiveScale()
+        local cx, cy = GetCursorPosition()
+        cx = cx / es
+        cy = cy / es
+        local dx = cx - dragStartX
+        local dy = cy - dragStartY
+        f:ClearAllPoints()
+        f:SetPoint("TOPLEFT", UIParent, "TOPLEFT", frameStartX + dx, frameStartY + dy)
+    end)
+end
 
 ------------------------------------------------------------------------
 -- Header: "Pull 3/12" with nav buttons
@@ -547,7 +571,7 @@ end)
 -- Settings panel
 ------------------------------------------------------------------------
 local settingsFrame = CreateFrame("Frame", "MDTHelperSettings", UIParent, "BackdropTemplate")
-settingsFrame:SetSize(220, 280)
+settingsFrame:SetSize(220, 300)
 settingsFrame:SetPoint("CENTER")
 settingsFrame:SetFrameStrata("DIALOG")
 settingsFrame:SetMovable(true)
@@ -616,7 +640,7 @@ resetPosBtn:SetScript("OnMouseDown", function()
     H.db.uiScale = 1
     f:SetScale(1)
     f:ClearAllPoints()
-    f:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -200)
+    f:SetPoint("TOPLEFT", UIParent, "TOPLEFT", UIParent:GetWidth() - WIDTH - 20, -200)
     H:UpdateUI()
     print("|cff00ccffMDTHelper|r: Position and size reset to default")
 end)
@@ -624,13 +648,13 @@ end)
 -- Transparency slider label
 local alphaLabel = settingsFrame:CreateFontString(nil, "OVERLAY")
 alphaLabel:SetFont(FONT, 9, "OUTLINE")
-alphaLabel:SetPoint("TOPLEFT", 10, -62)
+alphaLabel:SetPoint("TOPLEFT", 10, -60)
 alphaLabel:SetTextColor(0.7, 0.7, 0.7)
 
 -- Transparency slider
 local alphaSlider = CreateFrame("Slider", "MDTHelperAlphaSlider", settingsFrame, "OptionsSliderTemplate")
 alphaSlider:SetSize(200, 16)
-alphaSlider:SetPoint("TOPLEFT", 10, -80)
+alphaSlider:SetPoint("TOPLEFT", 10, -74)
 alphaSlider:SetMinMaxValues(0.1, 1.0)
 alphaSlider:SetValueStep(0.05)
 alphaSlider:SetObeyStepOnDrag(true)
@@ -653,13 +677,13 @@ end)
 -- Pull accuracy slider label
 local threshLabel = settingsFrame:CreateFontString(nil, "OVERLAY")
 threshLabel:SetFont(FONT, 9, "OUTLINE")
-threshLabel:SetPoint("TOPLEFT", 10, -102)
+threshLabel:SetPoint("TOPLEFT", 10, -108)
 threshLabel:SetTextColor(0.7, 0.7, 0.7)
 
 -- Pull accuracy slider
 local threshSlider = CreateFrame("Slider", "MDTHelperThreshSlider", settingsFrame, "OptionsSliderTemplate")
 threshSlider:SetSize(200, 16)
-threshSlider:SetPoint("TOPLEFT", 10, -120)
+threshSlider:SetPoint("TOPLEFT", 10, -122)
 threshSlider:SetMinMaxValues(0.5, 1.0)
 threshSlider:SetValueStep(0.05)
 threshSlider:SetObeyStepOnDrag(true)
@@ -680,13 +704,13 @@ end)
 -- UI Scale slider label
 local scaleLabel = settingsFrame:CreateFontString(nil, "OVERLAY")
 scaleLabel:SetFont(FONT, 9, "OUTLINE")
-scaleLabel:SetPoint("TOPLEFT", 10, -142)
+scaleLabel:SetPoint("TOPLEFT", 10, -156)
 scaleLabel:SetTextColor(0.7, 0.7, 0.7)
 
 -- UI Scale slider
 local scaleSlider = CreateFrame("Slider", "MDTHelperScaleSlider", settingsFrame, "OptionsSliderTemplate")
 scaleSlider:SetSize(200, 16)
-scaleSlider:SetPoint("TOPLEFT", 10, -160)
+scaleSlider:SetPoint("TOPLEFT", 10, -170)
 scaleSlider:SetMinMaxValues(0.5, 2.0)
 scaleSlider:SetValueStep(0.05)
 scaleSlider:SetObeyStepOnDrag(true)
@@ -703,12 +727,27 @@ scaleSlider:SetScript("OnValueChanged", function(self, value)
     H.db.uiScale = value
     UpdateScaleLabel(value)
     f:SetScale(value)
+    -- After scaling, nudge the frame so the header stays on screen.
+    -- Offsets are in the frame's scaled space; multiply by scale to
+    -- get UIParent-space, so available range is UIParent size / scale.
+    local point, _, _, ox, oy = f:GetPoint()
+    if ox and oy and point == "TOPLEFT" then
+        local maxX = UIParent:GetWidth() / value - WIDTH
+        local minY = -(UIParent:GetHeight() / value - 24)
+        local newX = math.max(0, math.min(ox, maxX))
+        local newY = math.max(minY, math.min(oy, 0))
+        if newX ~= ox or newY ~= oy then
+            f:ClearAllPoints()
+            f:SetPoint("TOPLEFT", UIParent, "TOPLEFT", newX, newY)
+            H.db.framePoint = { "TOPLEFT", "TOPLEFT", newX, newY }
+        end
+    end
 end)
 
 -- Auto-import toggle
 local autoImportBtn = CreateFrame("Frame", nil, settingsFrame)
 autoImportBtn:SetSize(200, 22)
-autoImportBtn:SetPoint("TOPLEFT", 10, -188)
+autoImportBtn:SetPoint("TOPLEFT", 10, -206)
 autoImportBtn:EnableMouse(true)
 Bg(autoImportBtn, 0.18, 0.18, 0.18, 1)
 
@@ -736,7 +775,7 @@ end)
 -- Unlock Frame toggle (allows moving + resizing height)
 local unlockBtn = CreateFrame("Frame", nil, settingsFrame)
 unlockBtn:SetSize(200, 22)
-unlockBtn:SetPoint("TOPLEFT", 10, -218)
+unlockBtn:SetPoint("TOPLEFT", 10, -236)
 unlockBtn:EnableMouse(true)
 Bg(unlockBtn, 0.18, 0.18, 0.18, 1)
 
@@ -797,8 +836,7 @@ end
 function H:_DoUpdateUI()
     -- Restore position & scale only once on load
     if not self._positionRestored then
-        local targetScale = self.db and self.db.uiScale or 1
-        f:SetScale(targetScale)
+        f:SetScale(self.db and self.db.uiScale or 1)
         if self.db and self.db.framePoint then
             local p = self.db.framePoint
             f:ClearAllPoints()
