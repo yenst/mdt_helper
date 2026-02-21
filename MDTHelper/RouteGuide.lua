@@ -103,16 +103,12 @@ f:SetScript("OnMouseDown", function(self, btn)
     if btn == "LeftButton" and not H.db.locked then self:StartMoving() end
 end)
 f:SetScript("OnMouseUp", function(self)
+    if H.db.locked then return end
     self:StopMovingOrSizing()
-    -- Always normalize to TOPLEFT so height changes grow downward
-    local scale = self:GetEffectiveScale()
-    local uiScale = UIParent:GetEffectiveScale()
-    local left, top = self:GetLeft(), self:GetTop()
-    local x = (left * scale) / uiScale
-    local y = (top * scale) / uiScale - UIParent:GetHeight()
-    self:ClearAllPoints()
-    self:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
-    H.db.framePoint = { "TOPLEFT", "TOPLEFT", x, y }
+    -- StopMovingOrSizing re-anchors to the nearest point.
+    -- Just read back whatever WoW computed and save it.
+    local point, _, relPoint, x, y = self:GetPoint()
+    H.db.framePoint = { point, relPoint, x, y }
 end)
 
 ------------------------------------------------------------------------
@@ -799,11 +795,16 @@ function H:UpdateUI()
 end
 
 function H:_DoUpdateUI()
-    -- Restore position
-    if self.db and self.db.framePoint then
-        local p = self.db.framePoint
-        f:ClearAllPoints()
-        f:SetPoint(p[1], UIParent, p[2], p[3], p[4])
+    -- Restore position & scale only once on load
+    if not self._positionRestored then
+        local targetScale = self.db and self.db.uiScale or 1
+        f:SetScale(targetScale)
+        if self.db and self.db.framePoint then
+            local p = self.db.framePoint
+            f:ClearAllPoints()
+            f:SetPoint(p[1], UIParent, p[2], p[3], p[4])
+        end
+        self._positionRestored = true
     end
 
     if not self.db or not self.db.enabled or not self.activeDungeon or #self.pulls == 0 then
