@@ -15,7 +15,7 @@ H.totalForcesRequired = 0
 H.activeDungeon = false
 H.completedCriteria = {}
 H.keyCompleted = false
-H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 0.8 }
+H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 0.9 }
 H.inCombat = false
 H.combatForcesSnapshot = 0
 
@@ -34,7 +34,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.bgAlpha == nil then MDTHelperDB.bgAlpha = 1 end
         if MDTHelperDB.autoImport == nil then MDTHelperDB.autoImport = true end
         if MDTHelperDB.autoAdvance == nil then MDTHelperDB.autoAdvance = true end
-        if MDTHelperDB.pullThreshold == nil then MDTHelperDB.pullThreshold = 0.8 end
+        if MDTHelperDB.pullThreshold == nil then MDTHelperDB.pullThreshold = 0.9 end
         -- frameHeight: nil means auto-size (default behavior)
         H.db = MDTHelperDB
 
