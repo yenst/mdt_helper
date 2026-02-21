@@ -371,6 +371,15 @@ expandedCumPct:SetPoint("TOPRIGHT", -2, -(EXPANDED_TITLE_H + (MOB_ROW_H - 8) / 2
 expandedCumPct:SetWidth(42)
 expandedCumPct:SetTextColor(0.55, 0.55, 0.55)
 
+-- Orange border for incomplete pulls
+local incompleteBorder = CreateFrame("Frame", nil, expandedBlock, "BackdropTemplate")
+incompleteBorder:SetPoint("TOPLEFT", -1, 1)
+incompleteBorder:SetPoint("BOTTOMRIGHT", 1, -1)
+incompleteBorder:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+incompleteBorder:SetBackdropBorderColor(1, 0.5, 0.1, 1)
+incompleteBorder:SetFrameLevel(expandedBlock:GetFrameLevel() + 10)
+incompleteBorder:Hide()
+
 local expandedMobRows = {}
 
 local PORTRAIT_SIZE = 24
@@ -542,7 +551,7 @@ end)
 -- Settings panel
 ------------------------------------------------------------------------
 local settingsFrame = CreateFrame("Frame", "MDTHelperSettings", UIParent, "BackdropTemplate")
-settingsFrame:SetSize(220, 190)
+settingsFrame:SetSize(220, 280)
 settingsFrame:SetPoint("CENTER")
 settingsFrame:SetFrameStrata("DIALOG")
 settingsFrame:SetMovable(true)
@@ -608,6 +617,8 @@ end)
 resetPosBtn:SetScript("OnMouseDown", function()
     H.db.framePoint = nil
     H.db.frameHeight = nil
+    H.db.uiScale = 1
+    f:SetScale(1)
     f:ClearAllPoints()
     f:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -200)
     H:UpdateUI()
@@ -643,10 +654,65 @@ alphaSlider:SetScript("OnValueChanged", function(self, value)
     ApplyOpacity(value)
 end)
 
+-- Pull accuracy slider label
+local threshLabel = settingsFrame:CreateFontString(nil, "OVERLAY")
+threshLabel:SetFont(FONT, 9, "OUTLINE")
+threshLabel:SetPoint("TOPLEFT", 10, -102)
+threshLabel:SetTextColor(0.7, 0.7, 0.7)
+
+-- Pull accuracy slider
+local threshSlider = CreateFrame("Slider", "MDTHelperThreshSlider", settingsFrame, "OptionsSliderTemplate")
+threshSlider:SetSize(200, 16)
+threshSlider:SetPoint("TOPLEFT", 10, -120)
+threshSlider:SetMinMaxValues(0.5, 1.0)
+threshSlider:SetValueStep(0.05)
+threshSlider:SetObeyStepOnDrag(true)
+
+threshSlider.Low:SetText("50%")
+threshSlider.High:SetText("100%")
+threshSlider.Text:SetText("")
+
+local function UpdateThreshLabel(val)
+    threshLabel:SetText("Pull Accuracy: " .. math.floor(val * 100 + 0.5) .. "%")
+end
+
+threshSlider:SetScript("OnValueChanged", function(self, value)
+    H.db.pullThreshold = value
+    UpdateThreshLabel(value)
+end)
+
+-- UI Scale slider label
+local scaleLabel = settingsFrame:CreateFontString(nil, "OVERLAY")
+scaleLabel:SetFont(FONT, 9, "OUTLINE")
+scaleLabel:SetPoint("TOPLEFT", 10, -142)
+scaleLabel:SetTextColor(0.7, 0.7, 0.7)
+
+-- UI Scale slider
+local scaleSlider = CreateFrame("Slider", "MDTHelperScaleSlider", settingsFrame, "OptionsSliderTemplate")
+scaleSlider:SetSize(200, 16)
+scaleSlider:SetPoint("TOPLEFT", 10, -160)
+scaleSlider:SetMinMaxValues(0.5, 2.0)
+scaleSlider:SetValueStep(0.05)
+scaleSlider:SetObeyStepOnDrag(true)
+
+scaleSlider.Low:SetText("50%")
+scaleSlider.High:SetText("200%")
+scaleSlider.Text:SetText("")
+
+local function UpdateScaleLabel(val)
+    scaleLabel:SetText("UI Scale: " .. math.floor(val * 100 + 0.5) .. "%")
+end
+
+scaleSlider:SetScript("OnValueChanged", function(self, value)
+    H.db.uiScale = value
+    UpdateScaleLabel(value)
+    f:SetScale(value)
+end)
+
 -- Auto-import toggle
 local autoImportBtn = CreateFrame("Frame", nil, settingsFrame)
 autoImportBtn:SetSize(200, 22)
-autoImportBtn:SetPoint("TOPLEFT", 10, -108)
+autoImportBtn:SetPoint("TOPLEFT", 10, -188)
 autoImportBtn:EnableMouse(true)
 Bg(autoImportBtn, 0.18, 0.18, 0.18, 1)
 
@@ -674,7 +740,7 @@ end)
 -- Unlock Frame toggle (allows moving + resizing height)
 local unlockBtn = CreateFrame("Frame", nil, settingsFrame)
 unlockBtn:SetSize(200, 22)
-unlockBtn:SetPoint("TOPLEFT", 10, -138)
+unlockBtn:SetPoint("TOPLEFT", 10, -218)
 unlockBtn:EnableMouse(true)
 Bg(unlockBtn, 0.18, 0.18, 0.18, 1)
 
@@ -712,6 +778,10 @@ function H:ToggleSettings()
     else
         alphaSlider:SetValue(H.db.bgAlpha or 1)
         UpdateAlphaLabel(H.db.bgAlpha or 1)
+        threshSlider:SetValue(H.db.pullThreshold or 0.8)
+        UpdateThreshLabel(H.db.pullThreshold or 0.8)
+        scaleSlider:SetValue(H.db.uiScale or 1)
+        UpdateScaleLabel(H.db.uiScale or 1)
         UpdateAutoImportLabel()
         UpdateUnlockLabel()
         settingsFrame:Show()
@@ -741,6 +811,7 @@ function H:_DoUpdateUI()
         return
     end
     f:Show()
+    f:SetScale(self.db.uiScale or 1)
     ApplyOpacity(self.db.bgAlpha or 1)
     UpdateAutoBtnColor()
 
@@ -815,7 +886,8 @@ function H:_DoUpdateUI()
                 row.mobName = e.name
                 row.name:SetText(e.name)
                 if e.forces > 0 then
-                    row.mobForces = e.numClones .. "x " .. ForcePct(e.forces) .. " = " .. ForcePct(e.forces * e.numClones)
+                    row.mobForces = e.numClones ..
+                    "x " .. ForcePct(e.forces) .. " = " .. ForcePct(e.forces * e.numClones)
                 else
                     row.mobForces = ""
                 end
@@ -838,6 +910,13 @@ function H:_DoUpdateUI()
             expandedCumPct:Show()
         else
             expandedCumPct:Hide()
+        end
+
+        -- Incomplete pull — orange outline
+        if pull.incomplete then
+            incompleteBorder:Show()
+        else
+            incompleteBorder:Hide()
         end
     else
         expandedBlock:Hide()
@@ -890,7 +969,8 @@ function H:_DoUpdateUI()
                     SetPortrait(pf.tex, e.displayId)
                     pf.mobName = e.name
                     if e.forces > 0 then
-                        pf.mobForces = e.numClones .. "x " .. ForcePct(e.forces) .. " = " .. ForcePct(e.forces * e.numClones)
+                        pf.mobForces = e.numClones ..
+                        "x " .. ForcePct(e.forces) .. " = " .. ForcePct(e.forces * e.numClones)
                     else
                         pf.mobForces = ""
                     end

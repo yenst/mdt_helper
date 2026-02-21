@@ -15,7 +15,9 @@ H.totalForcesRequired = 0
 H.activeDungeon = false
 H.completedCriteria = {}
 H.keyCompleted = false
-H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil }
+H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 0.8 }
+H.inCombat = false
+H.combatForcesSnapshot = 0
 
 ------------------------------------------------------------------------
 -- Event frame
@@ -32,6 +34,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.bgAlpha == nil then MDTHelperDB.bgAlpha = 1 end
         if MDTHelperDB.autoImport == nil then MDTHelperDB.autoImport = true end
         if MDTHelperDB.autoAdvance == nil then MDTHelperDB.autoAdvance = true end
+        if MDTHelperDB.pullThreshold == nil then MDTHelperDB.pullThreshold = 0.8 end
         -- frameHeight: nil means auto-size (default behavior)
         H.db = MDTHelperDB
 
@@ -44,6 +47,36 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         H:CheckInstance()
     elseif event == "CHALLENGE_MODE_COMPLETED" then
         H:OnKeyCompleted()
+    end
+end)
+
+------------------------------------------------------------------------
+-- Combat tracking — detect incomplete pulls
+------------------------------------------------------------------------
+local combatFrame = CreateFrame("Frame")
+combatFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+
+combatFrame:SetScript("OnEvent", function(_, event)
+    if not H.activeDungeon then return end
+    if not H.db.autoAdvance then return end
+
+    if event == "PLAYER_REGEN_DISABLED" then
+        -- Entering combat: snapshot current forces
+        H.inCombat = true
+        H.combatForcesSnapshot = H.totalForcesGained
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        -- Leaving combat: check if the current pull is incomplete
+        H.inCombat = false
+        local pull = H.pulls[H.currentPullIdx]
+        if pull and not pull.completed and pull.totalForces > 0 then
+            local forcesGainedThisCombat = H.totalForcesGained - H.combatForcesSnapshot
+            local threshold = H.db.pullThreshold or 0.8
+            if forcesGainedThisCombat > 0 and forcesGainedThisCombat < pull.totalForces * threshold then
+                pull.incomplete = true
+                if H.UpdateUI then H:UpdateUI() end
+            end
+        end
     end
 end)
 
@@ -244,9 +277,11 @@ function H:CheckAutoAdvance(oldForces, newForces)
     local pull = self.pulls[self.currentPullIdx]
     if not pull then return end
 
-    -- If we've accumulated at least 80% of this pull's expected forces, complete it
-    if pull.totalForces > 0 and self.pullForcesAccum >= pull.totalForces * 0.8 then
+    -- If we've accumulated enough of this pull's expected forces, complete it
+    local threshold = self.db.pullThreshold or 0.8
+    if pull.totalForces > 0 and self.pullForcesAccum >= pull.totalForces * threshold then
         pull.completed = true
+        pull.incomplete = nil
         self.pullForcesAccum = self.pullForcesAccum - pull.totalForces
         if self.pullForcesAccum < 0 then self.pullForcesAccum = 0 end
         if self.currentPullIdx < #self.pulls then
@@ -264,6 +299,7 @@ function H:CheckBossAdvance()
     if not pull then return end
     if pull.hasBoss then
         pull.completed = true
+        pull.incomplete = nil
         self.pullForcesAccum = 0
         if self.currentPullIdx < #self.pulls then
             self.currentPullIdx = self.currentPullIdx + 1
@@ -473,7 +509,9 @@ end
 function H:AdvancePull()
     if self.currentPullIdx < #self.pulls then
         local pull = self.pulls[self.currentPullIdx]
-        if pull then pull.completed = true end
+        if pull then
+            pull.completed = true; pull.incomplete = nil
+        end
         self.currentPullIdx = self.currentPullIdx + 1
         if self.UpdateUI then self:UpdateUI() end
     end
