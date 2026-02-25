@@ -35,6 +35,8 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.autoImport == nil then MDTHelperDB.autoImport = true end
         if MDTHelperDB.autoAdvance == nil then MDTHelperDB.autoAdvance = true end
         if MDTHelperDB.pullThreshold == nil then MDTHelperDB.pullThreshold = 0.9 end
+        if MDTHelperDB.mapPopout == nil then MDTHelperDB.mapPopout = false end
+        if MDTHelperDB.mapShowSurround == nil then MDTHelperDB.mapShowSurround = true end
         -- frameHeight: nil means auto-size (default behavior)
         H.db = MDTHelperDB
 
@@ -197,6 +199,7 @@ function H:BuildRoute()
     if not db or not db.currentDungeonIdx then return end
 
     local dungeonIdx = db.currentDungeonIdx
+    self.dungeonIdx = dungeonIdx
     local enemies = MDT.dungeonEnemies[dungeonIdx]
     if not enemies then return end
 
@@ -213,8 +216,35 @@ function H:BuildRoute()
         end
     end
 
+    -- Collect ALL clone positions for the dungeon (used by map popout for surrounding mobs)
+    self.allClonePositions = {}
+    for enemyIdx, enemyData in pairs(enemies) do
+        if enemyData.id and enemyData.clones then
+            for cloneIdx, cloneData in pairs(enemyData.clones) do
+                if cloneData.x and cloneData.y then
+                    local sl = cloneData.sublevel or 1
+                    if not self.allClonePositions[sl] then self.allClonePositions[sl] = {} end
+                    self.allClonePositions[sl][#self.allClonePositions[sl] + 1] = {
+                        x = cloneData.x,
+                        y = cloneData.y,
+                        sublevel = sl,
+                        npcId = enemyData.id,
+                        name = enemyData.name or "Unknown",
+                        forces = enemyData.count or 0,
+                        isBoss = enemyData.isBoss or false,
+                        displayId = enemyData.displayId,
+                        enemyScale = enemyData.scale or 1,
+                        cloneScale = cloneData.scale or 1,
+                        enemyIdx = enemyIdx,
+                        cloneIdx = cloneIdx,
+                    }
+                end
+            end
+        end
+    end
+
     for _, pull in ipairs(preset.value.pulls) do
-        local pullData = { enemies = {}, totalForces = 0, color = nil, completed = false }
+        local pullData = { enemies = {}, clonePositions = {}, totalForces = 0, color = nil, completed = false }
 
         if pull.color then
             pullData.color = { pull.color[1], pull.color[2], pull.color[3] }
@@ -236,8 +266,25 @@ function H:BuildRoute()
                             displayId = enemyData.displayId,
                         }
                     end
-                    for _ in pairs(clones) do
+                    for _, cloneIdx in pairs(clones) do
                         npcCounts[npcId].numClones = npcCounts[npcId].numClones + 1
+                        local cloneData = enemyData.clones and enemyData.clones[cloneIdx]
+                        if cloneData and cloneData.x and cloneData.y then
+                            pullData.clonePositions[#pullData.clonePositions + 1] = {
+                                x = cloneData.x,
+                                y = cloneData.y,
+                                sublevel = cloneData.sublevel or 1,
+                                npcId = npcId,
+                                name = enemyData.name or "Unknown",
+                                forces = enemyData.count or 0,
+                                isBoss = enemyData.isBoss or false,
+                                displayId = enemyData.displayId,
+                                enemyScale = enemyData.scale or 1,
+                                cloneScale = cloneData.scale or 1,
+                                enemyIdx = enemyIdx,
+                                cloneIdx = cloneIdx,
+                            }
+                        end
                     end
                 end
             end
@@ -573,6 +620,8 @@ SlashCmdList["MDTHELPER"] = function(msg)
         H:ShareRoute()
     elseif cmd == "copy" then
         H:CopyRouteString()
+    elseif cmd == "map" then
+        if H.ToggleMapPopout then H:ToggleMapPopout() end
     elseif cmd == "autoimport" then
         H.db.autoImport = not H.db.autoImport
         print("|cff00ccffMDTHelper|r: Auto-import leader route " .. (H.db.autoImport and "enabled" or "disabled"))
@@ -582,7 +631,7 @@ SlashCmdList["MDTHELPER"] = function(msg)
         print("  Pulls: " .. H:GetCompletedCount() .. "/" .. H:GetPullCount())
         print("  Current: " .. H.currentPullIdx)
     else
-        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|next|prev|reset|pos|settings|share|copy|autoimport|status]")
+        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|next|prev|reset|pos|settings|share|copy|map|autoimport|status]")
     end
 end
 
