@@ -612,6 +612,14 @@ SlashCmdList["MDTHELPER"] = function(msg)
     elseif cmd == "pos" then
         H.db.framePoint = nil
         H.db.frameHeight = nil
+        H.db.uiScale = 1
+        H._positionRestored = true
+        local guide = _G["MDTHelperGuide"]
+        if guide then
+            guide:SetScale(1)
+            guide:ClearAllPoints()
+            guide:SetPoint("TOPLEFT", UIParent, "TOPLEFT", UIParent:GetWidth() - 260, -200)
+        end
         if H.UpdateUI then H:UpdateUI() end
         print("|cff00ccffMDTHelper|r: Position and size reset to default")
     elseif cmd == "settings" or cmd == "config" then
