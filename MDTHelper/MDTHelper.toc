@@ -10,3 +10,4 @@
 Core.lua
 RouteGuide.lua
 MapPopout.lua
+Settings.lua
