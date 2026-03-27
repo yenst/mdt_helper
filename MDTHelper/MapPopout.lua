@@ -22,6 +22,8 @@ local SURROUND_RADIUS = 20 -- only show surrounding mobs within this distance of
 local currentDungeonIdx = nil
 local currentSublevel = 1
 local userZoomOffset = 0 -- manual zoom adjustment: negative = zoom out, positive = zoom in
+local userPanOffsetX = 0 -- manual pan offset in panel-space pixels
+local userPanOffsetY = 0 -- manual pan offset in panel-space pixels
 local lastPullIdx = nil  -- track pull changes to reset zoom offset
 
 ------------------------------------------------------------------------
@@ -79,44 +81,13 @@ closeBtn:SetScript("OnMouseDown", function()
     H.db.mapPopout = false
 end)
 
--- Forward declare UpdateMapPopout so zoom buttons can call it
+-- Forward declare UpdateMapPopout so buttons can call it
 local UpdateMapPopout
 
--- Zoom button helper
-local function MakeZoomBtn(label, xOffset)
-    local btn = CreateFrame("Frame", nil, titleBar)
-    btn:SetSize(16, 16)
-    btn:SetPoint("RIGHT", closeBtn, "LEFT", xOffset, 0)
-    btn:EnableMouse(true)
-    local bg = btn:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(0.12, 0.12, 0.12, 1)
-    local txt = btn:CreateFontString(nil, "OVERLAY")
-    txt:SetFont(FONT, 11, "OUTLINE")
-    txt:SetPoint("CENTER", 0, 0)
-    txt:SetText(label)
-    txt:SetTextColor(0.6, 0.6, 0.6)
-    btn:SetScript("OnEnter", function() txt:SetTextColor(0, 0.8, 1) end)
-    btn:SetScript("OnLeave", function() txt:SetTextColor(0.6, 0.6, 0.6) end)
-    return btn
-end
-
-local zoomOutBtn = MakeZoomBtn("-", -22)
-local zoomInBtn = MakeZoomBtn("+", -4)
-
-zoomInBtn:SetScript("OnMouseDown", function()
-    userZoomOffset = userZoomOffset + 0.3
-    if UpdateMapPopout then UpdateMapPopout() end
-end)
-zoomOutBtn:SetScript("OnMouseDown", function()
-    userZoomOffset = userZoomOffset - 0.3
-    if UpdateMapPopout then UpdateMapPopout() end
-end)
-
--- Surround mobs toggle button
+-- Surround mobs toggle button (in title bar, next to close)
 local surroundBtn = CreateFrame("Frame", nil, titleBar)
 surroundBtn:SetSize(16, 16)
-surroundBtn:SetPoint("RIGHT", zoomOutBtn, "LEFT", -4, 0)
+surroundBtn:SetPoint("RIGHT", closeBtn, "LEFT", -4, 0)
 surroundBtn:EnableMouse(true)
 local surroundBg = surroundBtn:CreateTexture(nil, "BACKGROUND")
 surroundBg:SetAllPoints()
@@ -177,14 +148,48 @@ scrollFrame:SetPoint("BOTTOMRIGHT", 0, 0)
 -- Tiles + blips are children of this frame.
 ------------------------------------------------------------------------
 scrollFrame:EnableMouseWheel(true)
+scrollFrame:EnableMouse(true)
 scrollFrame:SetScript("OnMouseWheel", function(_, delta)
     userZoomOffset = userZoomOffset + delta * 0.3
     if UpdateMapPopout then UpdateMapPopout() end
 end)
 
+-- Left-click drag to pan
+local isPanning = false
+local panStartX, panStartY = 0, 0
+
+scrollFrame:SetScript("OnMouseDown", function(_, btn)
+    if btn == "LeftButton" then
+        isPanning = true
+        local es = scrollFrame:GetEffectiveScale()
+        panStartX = GetCursorPosition() / es
+        panStartY = select(2, GetCursorPosition()) / es
+    end
+end)
+
+scrollFrame:SetScript("OnMouseUp", function(_, btn)
+    if btn == "LeftButton" then isPanning = false end
+end)
+
 local mapPanel = CreateFrame("Frame", "MDTHelperMapPanel", nil)
 mapPanel:SetSize(MDT_W, MDT_H) -- will be resized to match scrollFrame
 scrollFrame:SetScrollChild(mapPanel)
+
+scrollFrame:SetScript("OnUpdate", function()
+    if not isPanning then return end
+    local es = scrollFrame:GetEffectiveScale()
+    local cx, cy = GetCursorPosition()
+    cx = cx / es
+    cy = cy / es
+    local dx = cx - panStartX
+    local dy = cy - panStartY
+    panStartX, panStartY = cx, cy
+
+    local zoomScale = mapPanel:GetScale() or 1
+    userPanOffsetX = userPanOffsetX - dx / zoomScale
+    userPanOffsetY = userPanOffsetY + dy / zoomScale
+    if UpdateMapPopout then UpdateMapPopout() end
+end)
 
 ------------------------------------------------------------------------
 -- Tiles: 4x3 (Blizzard) — square, size = frame:GetWidth()/4
@@ -228,8 +233,7 @@ for i = 1, 10 do
 end
 
 ------------------------------------------------------------------------
--- Resize tiles to match the mapPanel width (called when scrollFrame
--- changes size). Exactly like MDT:SetScale — tiles are square.
+-- Resize tiles to match the mapPanel width. Tiles are square.
 ------------------------------------------------------------------------
 local function ResizeTiles(panelW)
     local sz4 = panelW / 4
@@ -394,7 +398,7 @@ local function GetPullSublevel(pull)
 end
 
 ------------------------------------------------------------------------
--- Sublevel buttons
+-- Sublevel buttons (in title bar)
 ------------------------------------------------------------------------
 local sublevelButtons = {}
 
@@ -456,15 +460,6 @@ end
 
 ------------------------------------------------------------------------
 -- Zoom to pull
---
--- Mirrors MDT's own approach:
---   1. mapPanel base size = scrollFrame size (our "scale" factor)
---   2. mapPanel:SetScale(zoomScale) for zoom
---   3. scrollFrame:SetHorizontalScroll / SetVerticalScroll for pan
---
--- Our "base scale" is scrollFrame:GetWidth() / MDT_W so the full map
--- fits the viewport width. On top of that, we compute a zoomScale to
--- zoom into the pull bounding box.
 ------------------------------------------------------------------------
 local function GetBaseScale()
     local sw = scrollFrame:GetWidth()
@@ -478,7 +473,6 @@ local function ZoomToPull(pull)
     if sw <= 0 or sh <= 0 then return end
 
     local baseScale = sw / MDT_W
-    -- Set mapPanel to the base size (full map fits scrollFrame width)
     local panelW = MDT_W * baseScale
     local panelH = MDT_H * baseScale
     mapPanel:SetSize(panelW, panelH)
@@ -498,7 +492,6 @@ local function ZoomToPull(pull)
     end
 
     if not minX then
-        -- No clones: show full map, no zoom
         mapPanel:SetScale(1)
         scrollFrame:SetHorizontalScroll(0)
         scrollFrame:SetVerticalScroll(0)
@@ -508,35 +501,26 @@ local function ZoomToPull(pull)
     -- Pad bounding box
     minX = minX - ZOOM_BORDER
     maxX = maxX + ZOOM_BORDER
-    minY = minY - ZOOM_BORDER -- more negative
-    maxY = maxY + ZOOM_BORDER -- less negative
+    minY = minY - ZOOM_BORDER
+    maxY = maxY + ZOOM_BORDER
 
     local diffX = maxX - minX
-    local diffY = -(minY - maxY) -- = maxY - minY but both are negative, diffY>0
+    local diffY = -(minY - maxY)
     if diffX < 1 then diffX = 1 end
     if diffY < 1 then diffY = 1 end
 
-    -- Zoom scale: how much bigger than the base to make the pull fill the view
-    -- In base coords (panel pixels), the bbox spans diffX*baseScale x diffY*baseScale.
-    -- We want that to fill sw x sh, so zoomScale = min(sw/(diffX*baseScale), sh/(diffY*baseScale))
     local zoomScale = math.min(sw / (diffX * baseScale), sh / (diffY * baseScale))
-    -- Apply manual zoom offset
     zoomScale = zoomScale + userZoomOffset
     if zoomScale < 1 then zoomScale = 1 end
     if zoomScale > 10 then zoomScale = 10 end
 
     mapPanel:SetScale(zoomScale)
 
-    -- Scroll to center on the pull.
-    -- In panel coords (pre-zoom), the center of the bbox is:
-    local centerX = (minX + maxX) / 2 * baseScale  -- pixels from panel left
-    local centerY = -(minY + maxY) / 2 * baseScale -- pixels from panel top (flip Y: -negY = positive down)
+    local centerX = (minX + maxX) / 2 * baseScale
+    local centerY = -(minY + maxY) / 2 * baseScale
 
-    -- The scroll offsets center that point in the scrollFrame.
-    -- MDT pattern: scroll = (center * zoomScale - viewSize/2) / zoomScale
-    --            = center - viewSize / (2 * zoomScale)
-    local scrollH = centerX - sw / (2 * zoomScale)
-    local scrollV = centerY - sh / (2 * zoomScale)
+    local scrollH = centerX - sw / (2 * zoomScale) + userPanOffsetX
+    local scrollV = centerY - sh / (2 * zoomScale) + userPanOffsetY
 
     -- Clamp
     local maxScrollH = (panelW * zoomScale - panelW) / zoomScale
@@ -554,9 +538,6 @@ end
 
 ------------------------------------------------------------------------
 -- Blip rendering
--- MDT: blip:SetPoint("CENTER", mapPanelTile1, "TOPLEFT", clone.x * scale, clone.y * scale)
--- Our equivalent: anchor to tiles4[1] (or mapPanel) TOPLEFT with coords * baseScale
--- (baseScale = panelWidth / 840, same role as MDT:GetScale())
 ------------------------------------------------------------------------
 local function SetupBlip(blip, cp, baseScale, sz, overlayR, overlayG, overlayB, overlayA)
     blip:SetSize(sz, sz)
@@ -617,7 +598,7 @@ UpdateBlips = function()
         end
     end
 
-    -- Compute pull bounding box for proximity filtering
+    -- Compute pull bounding box for proximity filtering (in original MDT coords)
     local minX, maxX, minY, maxY
     for _, cp in ipairs(pull.clonePositions) do
         if cp.sublevel == currentSublevel then
@@ -638,7 +619,6 @@ UpdateBlips = function()
         for _, cp in ipairs(allClones) do
             local key = cp.enemyIdx .. "_" .. cp.cloneIdx
             if not pullCloneKeys[key] then
-                -- Only render if within radius of the pull bounding box
                 if cp.x >= minX - rad and cp.x <= maxX + rad
                     and cp.y >= minY - rad and cp.y <= maxY + rad then
                     idx = idx + 1
@@ -668,6 +648,72 @@ UpdateBlips = function()
 
     activeBlipCount = idx
 end
+
+------------------------------------------------------------------------
+-- Map control buttons (bottom-right overlay on the map area)
+------------------------------------------------------------------------
+local BTN_SZ = 18
+local BTN_GAP = 2
+
+local function MakeMapBtn(parent, label)
+    local btn = CreateFrame("Frame", nil, parent)
+    btn:SetSize(BTN_SZ, BTN_SZ)
+    btn:EnableMouse(true)
+    local bg = btn:CreateTexture(nil, "BACKGROUND")
+    bg:SetAllPoints()
+    bg:SetColorTexture(0.06, 0.06, 0.06, 0.8)
+    local txt = btn:CreateFontString(nil, "OVERLAY")
+    txt:SetFont(FONT, 10, "OUTLINE")
+    txt:SetPoint("CENTER", 0, 0)
+    txt:SetText(label)
+    txt:SetTextColor(0.6, 0.6, 0.6)
+    btn.txt = txt
+    btn:SetScript("OnEnter", function() txt:SetTextColor(0, 0.8, 1) end)
+    btn:SetScript("OnLeave", function() txt:SetTextColor(0.6, 0.6, 0.6) end)
+    return btn
+end
+
+-- Container frame anchored to bottom-right of the map, above resize handle
+local controlBar = CreateFrame("Frame", nil, mf)
+controlBar:SetSize(3 * BTN_SZ + 2 * BTN_GAP, BTN_SZ)
+controlBar:SetPoint("BOTTOMRIGHT", -4, 8)
+controlBar:SetFrameLevel(mf:GetFrameLevel() + 8) -- above map, below resize
+
+-- Zoom +
+local zoomInBtn = MakeMapBtn(controlBar, "+")
+zoomInBtn:SetPoint("RIGHT", controlBar, "RIGHT", 0, 0)
+zoomInBtn:SetScript("OnMouseDown", function()
+    userZoomOffset = userZoomOffset + 0.3
+    if UpdateMapPopout then UpdateMapPopout() end
+end)
+
+-- Zoom -
+local zoomOutBtn = MakeMapBtn(controlBar, "-")
+zoomOutBtn:SetPoint("RIGHT", zoomInBtn, "LEFT", -BTN_GAP, 0)
+zoomOutBtn:SetScript("OnMouseDown", function()
+    userZoomOffset = userZoomOffset - 0.3
+    if UpdateMapPopout then UpdateMapPopout() end
+end)
+
+-- Reset view
+local resetBtn = MakeMapBtn(controlBar, "R")
+resetBtn:SetPoint("RIGHT", zoomOutBtn, "LEFT", -BTN_GAP, 0)
+resetBtn:SetScript("OnMouseDown", function()
+    userZoomOffset = 0
+    userPanOffsetX = 0
+    userPanOffsetY = 0
+    if UpdateMapPopout then UpdateMapPopout() end
+end)
+resetBtn:SetScript("OnEnter", function(self)
+    resetBtn.txt:SetTextColor(0, 0.8, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Reset view", 1, 1, 1)
+    GameTooltip:Show()
+end)
+resetBtn:SetScript("OnLeave", function()
+    resetBtn.txt:SetTextColor(0.6, 0.6, 0.6)
+    GameTooltip:Hide()
+end)
 
 ------------------------------------------------------------------------
 -- Resize handle
@@ -750,9 +796,11 @@ UpdateMapPopout = function()
     local pull = H.pulls[H.currentPullIdx]
     if not pull then return end
 
-    -- Reset manual zoom when pull changes
+    -- Reset manual zoom/pan when pull changes
     if lastPullIdx ~= H.currentPullIdx then
         userZoomOffset = 0
+        userPanOffsetX = 0
+        userPanOffsetY = 0
         lastPullIdx = H.currentPullIdx
     end
 
