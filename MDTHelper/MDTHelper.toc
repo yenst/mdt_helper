@@ -8,6 +8,18 @@
 ## IconTexture: Interface\AddOns\MDTHelper\MDTHelper.tga
 ## SavedVariables: MDTHelperDB
 
+## Category-enUS: Mythic+ Dungeons
+## Category-deDE: Mythic+ Dungeons
+## Category-esES: Mythic+ Dungeons
+## Category-esMX: Mythic+ Dungeons
+## Category-frFR: Donjons Mythique+
+## Category-itIT: Mythic+ Dungeons
+## Category-koKR: Mythic+ Dungeons
+## Category-ptBR: Mythic+ Dungeons
+## Category-ruRU: Подземелья М+
+## Category-zhCN: Mythic+ Dungeons
+## Category-zhTW: Mythic+ Dungeons
+
 Core.lua
 RouteGuide.lua
 MapPopout.lua
