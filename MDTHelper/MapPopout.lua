@@ -77,14 +77,15 @@ end)
 local UpdateMapPopout
 
 -- Surround mobs toggle button (in title bar, next to close)
-local surroundBtn = CreateFrame("Frame", nil, titleBar)
+local surroundBtn = CreateFrame("Button", nil, titleBar)
 surroundBtn:SetSize(16, 16)
 surroundBtn:SetPoint("RIGHT", closeBtn, "LEFT", -2, 0)
-surroundBtn:EnableMouse(true)
-local surroundIcon = surroundBtn:CreateTexture(nil, "OVERLAY")
+local surroundIcon = surroundBtn:CreateTexture(nil, "ARTWORK")
 surroundIcon:SetSize(14, 14)
 surroundIcon:SetPoint("CENTER")
 surroundIcon:SetTexture("Interface\\Minimap\\Tracking\\None")
+surroundBtn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
+surroundBtn:GetHighlightTexture():SetAlpha(0.3)
 
 local function UpdateSurroundBtnColor()
     local on = H.db.mapShowSurround ~= false
@@ -634,8 +635,8 @@ end
 ------------------------------------------------------------------------
 -- Map control buttons (bottom-right overlay on the map area)
 ------------------------------------------------------------------------
-local BTN_SZ = 20
-local BTN_GAP = 1
+local BTN_SZ = 22
+local BTN_GAP = 2
 
 -- Container frame anchored to bottom-right of the map, above resize handle
 local controlBar = CreateFrame("Frame", nil, mf)
@@ -643,38 +644,58 @@ controlBar:SetSize(3 * BTN_SZ + 2 * BTN_GAP, BTN_SZ)
 controlBar:SetPoint("BOTTOMRIGHT", -4, 8)
 controlBar:SetFrameLevel(mf:GetFrameLevel() + 8) -- above map, below resize
 
--- Zoom +
-local zoomInBtn = CreateFrame("Button", nil, controlBar, "UIPanelButtonTemplate")
-zoomInBtn:SetSize(BTN_SZ, BTN_SZ)
+-- Helper: create a small icon button with highlight
+local function MapIconBtn(parent)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetSize(BTN_SZ, BTN_SZ)
+    b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
+    b:GetHighlightTexture():SetAlpha(0.3)
+    return b
+end
+
+-- Zoom + (green arrow pointing up)
+local zoomInBtn = MapIconBtn(controlBar)
 zoomInBtn:SetPoint("RIGHT", controlBar, "RIGHT", 0, 0)
-zoomInBtn:SetText("+")
-zoomInBtn:SetNormalFontObject("GameFontNormalSmall")
+local zoomInTex = zoomInBtn:CreateTexture(nil, "ARTWORK")
+zoomInTex:SetSize(14, 14)
+zoomInTex:SetPoint("CENTER")
+zoomInTex:SetAtlas("uitools-icon-plus", false)
 zoomInBtn:SetScript("OnClick", function()
     userZoomOffset = userZoomOffset + 0.3
     if UpdateMapPopout then UpdateMapPopout() end
 end)
+zoomInBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Zoom in", 1, 1, 1)
+    GameTooltip:Show()
+end)
+zoomInBtn:SetScript("OnLeave", GameTooltip_Hide)
 
--- Zoom -
-local zoomOutBtn = CreateFrame("Button", nil, controlBar, "UIPanelButtonTemplate")
-zoomOutBtn:SetSize(BTN_SZ, BTN_SZ)
+-- Zoom - (green arrow pointing down)
+local zoomOutBtn = MapIconBtn(controlBar)
 zoomOutBtn:SetPoint("RIGHT", zoomInBtn, "LEFT", -BTN_GAP, 0)
-zoomOutBtn:SetText("-")
-zoomOutBtn:SetNormalFontObject("GameFontNormalSmall")
+local zoomOutTex = zoomOutBtn:CreateTexture(nil, "ARTWORK")
+zoomOutTex:SetSize(14, 14)
+zoomOutTex:SetPoint("CENTER")
+zoomOutTex:SetAtlas("uitools-icon-minus", false)
 zoomOutBtn:SetScript("OnClick", function()
     userZoomOffset = userZoomOffset - 0.3
     if UpdateMapPopout then UpdateMapPopout() end
 end)
+zoomOutBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_TOP")
+    GameTooltip:SetText("Zoom out", 1, 1, 1)
+    GameTooltip:Show()
+end)
+zoomOutBtn:SetScript("OnLeave", GameTooltip_Hide)
 
--- Reset view
-local resetBtn = CreateFrame("Button", nil, controlBar, "UIPanelButtonTemplate")
-resetBtn:SetSize(BTN_SZ, BTN_SZ)
+-- Reset view (green cross icon)
+local resetBtn = MapIconBtn(controlBar)
 resetBtn:SetPoint("RIGHT", zoomOutBtn, "LEFT", -BTN_GAP, 0)
-resetBtn:SetNormalFontObject("GameFontNormalSmall")
--- Use a circular arrow icon texture instead of text
-local resetIcon = resetBtn:CreateTexture(nil, "OVERLAY")
-resetIcon:SetSize(12, 12)
-resetIcon:SetPoint("CENTER")
-resetIcon:SetTexture("Interface\\Buttons\\UI-RefreshButton")
+local resetTex = resetBtn:CreateTexture(nil, "ARTWORK")
+resetTex:SetSize(14, 14)
+resetTex:SetPoint("CENTER")
+resetTex:SetAtlas("uitools-icon-refresh", false)
 resetBtn:SetScript("OnClick", function()
     userZoomOffset = 0
     userPanOffsetX = 0
@@ -686,9 +707,7 @@ resetBtn:SetScript("OnEnter", function(self)
     GameTooltip:SetText("Reset view", 1, 1, 1)
     GameTooltip:Show()
 end)
-resetBtn:SetScript("OnLeave", function()
-    GameTooltip:Hide()
-end)
+resetBtn:SetScript("OnLeave", GameTooltip_Hide)
 
 ------------------------------------------------------------------------
 -- Resize handle

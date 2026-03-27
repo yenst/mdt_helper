@@ -149,105 +149,127 @@ local headerText = Text(headerBg, 11, "CENTER")
 headerText:SetPoint("CENTER")
 headerText:SetTextColor(0, 0.8, 1)
 
-local function NavBtn(parent, label, ox)
-    local b = CreateFrame("Frame", nil, parent)
-    b:SetSize(22, 18)
-    b:SetPoint("TOPRIGHT", parent, "TOPRIGHT", ox, -3)
-    b:EnableMouse(true)
-    Bg(b, 0.18, 0.18, 0.18, 1)
-    RegisterBg(b, 0.18, 0.18, 0.18, 1)
-    local t = Text(b, 10, "CENTER")
-    t:SetPoint("CENTER")
-    t:SetText(label)
-    b.label = t
-    b:SetScript("OnEnter", function(s) SetBg(s, 0.35, 0.35, 0.35, 1) end)
-    b:SetScript("OnLeave", function(s) SetBg(s, 0.18, 0.18, 0.18, 1) end)
+local NAV_SZ = 16
+local ICON_SZ = 12
+
+-- Helper: create a small icon button with highlight
+local function IconBtn(parent)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetSize(NAV_SZ, NAV_SZ)
+    b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
+    b:GetHighlightTexture():SetAlpha(0.3)
     return b
 end
 
-local shareBtn = NavBtn(headerBg, "S", -76)
-shareBtn:ClearAllPoints()
+-- Helper: add a centered atlas icon to a button
+local function SetBtnAtlas(btn, atlas, sz)
+    local t = btn:CreateTexture(nil, "ARTWORK")
+    t:SetSize(sz or ICON_SZ, sz or ICON_SZ)
+    t:SetPoint("CENTER")
+    t:SetAtlas(atlas, false)
+    btn._icon = t
+    return t
+end
+
+-- Helper: add a centered texture icon to a button
+local function SetBtnTexture(btn, path, sz)
+    local t = btn:CreateTexture(nil, "ARTWORK")
+    t:SetSize(sz or ICON_SZ, sz or ICON_SZ)
+    t:SetPoint("CENTER")
+    t:SetTexture(path)
+    btn._icon = t
+    return t
+end
+
+-- Share button (chat bubble icon)
+local shareBtn = IconBtn(headerBg)
 shareBtn:SetPoint("TOPLEFT", headerBg, "TOPLEFT", 4, -3)
+SetBtnTexture(shareBtn, "Interface\\GossipFrame\\ChatBubbleGossipIcon", 14)
+shareBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 shareBtn:SetScript("OnEnter", function(s)
-    SetBg(s, 0.35, 0.35, 0.35, 1)
     GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
     GameTooltip:SetText("Share Route", 0, 0.8, 1)
     GameTooltip:AddLine("Left-click: Send to group", 0.7, 0.7, 0.7)
     GameTooltip:AddLine("Right-click: Copy export string", 0.7, 0.7, 0.7)
     GameTooltip:Show()
 end)
-shareBtn:SetScript("OnLeave", function(s)
-    SetBg(s, 0.18, 0.18, 0.18, 1)
-    GameTooltip:Hide()
-end)
-shareBtn:SetScript("OnMouseDown", function(_, btn)
+shareBtn:SetScript("OnLeave", GameTooltip_Hide)
+shareBtn:SetScript("OnClick", function(_, btn)
     if btn == "LeftButton" then
         H:ShareRoute()
     elseif btn == "RightButton" then
         H:CopyRouteString()
     end
 end)
-shareBtn.label:SetTextColor(0.3, 0.8, 0.3)
 
-local mapBtn = NavBtn(headerBg, "M", -76)
-mapBtn:ClearAllPoints()
+-- Map popout button (minimap tracking icon)
+local mapBtn = IconBtn(headerBg)
 mapBtn:SetPoint("LEFT", shareBtn, "RIGHT", 2, 0)
+SetBtnTexture(mapBtn, "Interface\\Minimap\\Tracking\\None", 14)
 mapBtn:SetScript("OnEnter", function(s)
-    SetBg(s, 0.35, 0.35, 0.35, 1)
     GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
     GameTooltip:SetText("Map Popout", 0, 0.8, 1)
     GameTooltip:AddLine("Toggle dungeon map overlay", 0.7, 0.7, 0.7)
     GameTooltip:Show()
 end)
-mapBtn:SetScript("OnLeave", function(s)
-    SetBg(s, 0.18, 0.18, 0.18, 1)
-    GameTooltip:Hide()
-end)
-mapBtn:SetScript("OnMouseDown", function()
+mapBtn:SetScript("OnLeave", GameTooltip_Hide)
+mapBtn:SetScript("OnClick", function()
     if H.ToggleMapPopout then H:ToggleMapPopout() end
 end)
-mapBtn.label:SetTextColor(0.5, 0.7, 1)
 
-local autoBtn = NavBtn(headerBg, "A", -76)
-autoBtn:ClearAllPoints()
+-- Auto-advance toggle (green arrow = on, rotated to play-style right arrow)
+local autoBtn = IconBtn(headerBg)
 autoBtn:SetPoint("LEFT", mapBtn, "RIGHT", 2, 0)
+local autoIcon = SetBtnAtlas(autoBtn, "bags-greenarrow", 12)
+autoIcon:SetRotation(-math.pi / 2) -- point right like a "play" arrow
 local function UpdateAutoBtnColor()
     if H.db.autoAdvance then
-        autoBtn.label:SetTextColor(0.3, 1, 0.3)
+        autoBtn._icon:SetVertexColor(0.3, 1, 0.3)
+        autoBtn._icon:SetAlpha(1)
     else
-        autoBtn.label:SetTextColor(1, 0.3, 0.3)
+        autoBtn._icon:SetVertexColor(1, 0.3, 0.3)
+        autoBtn._icon:SetAlpha(0.6)
     end
 end
 UpdateAutoBtnColor()
 autoBtn:SetScript("OnEnter", function(s)
-    SetBg(s, 0.35, 0.35, 0.35, 1)
     GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
     local state = H.db.autoAdvance and "|cff00ff00ON|r" or "|cffff4444OFF|r"
     GameTooltip:SetText("Auto-Advance: " .. state, 0, 0.8, 1)
     GameTooltip:AddLine("Toggle automatic pull tracking", 0.7, 0.7, 0.7)
     GameTooltip:Show()
 end)
-autoBtn:SetScript("OnLeave", function(s)
-    SetBg(s, 0.18, 0.18, 0.18, 1)
-    GameTooltip:Hide()
-end)
-autoBtn:SetScript("OnMouseDown", function()
+autoBtn:SetScript("OnLeave", GameTooltip_Hide)
+autoBtn:SetScript("OnClick", function()
     H.db.autoAdvance = not H.db.autoAdvance
     UpdateAutoBtnColor()
     local state = H.db.autoAdvance and "enabled" or "disabled"
     print("|cff00ccffMDTHelper|r: Auto-advance " .. state)
 end)
 
-local minBtn = NavBtn(headerBg, "-", -52)
-minBtn:SetScript("OnMouseDown", function()
+-- Minimize/expand button (arrow pointing down/up)
+local minBtn = IconBtn(headerBg)
+minBtn:SetPoint("TOPRIGHT", headerBg, "TOPRIGHT", -52, -3)
+local minIcon = SetBtnAtlas(minBtn, "bags-greenarrow", 12)
+minIcon:SetRotation(math.pi) -- point down = minimize
+minBtn:SetScript("OnClick", function()
     H.db.minimized = not H.db.minimized
     H:UpdateUI()
 end)
 
-local prevBtn = NavBtn(headerBg, "<", -28)
-prevBtn:SetScript("OnMouseDown", function() H:RetreatPull() end)
-local nextBtn = NavBtn(headerBg, ">", -4)
-nextBtn:SetScript("OnMouseDown", function() H:AdvancePull() end)
+-- Previous pull (arrow pointing left)
+local prevBtn = IconBtn(headerBg)
+prevBtn:SetPoint("TOPRIGHT", headerBg, "TOPRIGHT", -28, -3)
+local prevIcon = SetBtnAtlas(prevBtn, "bags-greenarrow", 12)
+prevIcon:SetRotation(math.pi / 2) -- point left
+prevBtn:SetScript("OnClick", function() H:RetreatPull() end)
+
+-- Next pull (arrow pointing right)
+local nextBtn = IconBtn(headerBg)
+nextBtn:SetPoint("TOPRIGHT", headerBg, "TOPRIGHT", -4, -3)
+local nextIcon = SetBtnAtlas(nextBtn, "bags-greenarrow", 12)
+nextIcon:SetRotation(-math.pi / 2) -- point right
+nextBtn:SetScript("OnClick", function() H:AdvancePull() end)
 
 ------------------------------------------------------------------------
 -- Forces bar
@@ -613,8 +635,8 @@ function H:_DoUpdateUI()
     local n = #self.pulls
     local minimized = self.db.minimized
 
-    -- Update minimize button label
-    minBtn.label:SetText(minimized and "+" or "-")
+    -- Update minimize button icon direction
+    minIcon:SetRotation(minimized and 0 or math.pi) -- up arrow = expand, down arrow = minimize
 
     -- Header
     headerText:SetText("Pull " .. cur .. " / " .. total .. " |r")
