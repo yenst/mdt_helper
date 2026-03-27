@@ -5,6 +5,7 @@
 ## Version: 0.2.0
 ## Dependencies: MythicDungeonTools
 ## OptionalDeps: MDT_Legacy
+## IconTexture: Interface\AddOns\MDTHelper\MDTHelper.tga
 ## SavedVariables: MDTHelperDB
 
 Core.lua
