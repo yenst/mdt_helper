@@ -65,18 +65,10 @@ titleText:SetPoint("LEFT", 8, 0)
 titleText:SetTextColor(0, 0.8, 1)
 titleText:SetText("Map")
 
-local closeBtn = CreateFrame("Frame", nil, titleBar)
-closeBtn:SetSize(16, 16)
-closeBtn:SetPoint("RIGHT", -4, 0)
-closeBtn:EnableMouse(true)
-local closeTxt = closeBtn:CreateFontString(nil, "OVERLAY")
-closeTxt:SetFont(FONT, 12, "OUTLINE")
-closeTxt:SetPoint("CENTER")
-closeTxt:SetText("x")
-closeTxt:SetTextColor(0.6, 0.6, 0.6)
-closeBtn:SetScript("OnEnter", function() closeTxt:SetTextColor(1, 0.3, 0.3) end)
-closeBtn:SetScript("OnLeave", function() closeTxt:SetTextColor(0.6, 0.6, 0.6) end)
-closeBtn:SetScript("OnMouseDown", function()
+local closeBtn = CreateFrame("Button", nil, titleBar, "UIPanelCloseButtonNoScripts")
+closeBtn:SetSize(18, 18)
+closeBtn:SetPoint("RIGHT", -2, 0)
+closeBtn:SetScript("OnClick", function()
     mf:Hide()
     H.db.mapPopout = false
 end)
@@ -87,23 +79,22 @@ local UpdateMapPopout
 -- Surround mobs toggle button (in title bar, next to close)
 local surroundBtn = CreateFrame("Frame", nil, titleBar)
 surroundBtn:SetSize(16, 16)
-surroundBtn:SetPoint("RIGHT", closeBtn, "LEFT", -4, 0)
+surroundBtn:SetPoint("RIGHT", closeBtn, "LEFT", -2, 0)
 surroundBtn:EnableMouse(true)
-local surroundBg = surroundBtn:CreateTexture(nil, "BACKGROUND")
-surroundBg:SetAllPoints()
-surroundBg:SetColorTexture(0.12, 0.12, 0.12, 1)
-local surroundTxt = surroundBtn:CreateFontString(nil, "OVERLAY")
-surroundTxt:SetFont(FONT, 9, "OUTLINE")
-surroundTxt:SetPoint("CENTER", 0, 0)
-surroundTxt:SetText("S")
+local surroundIcon = surroundBtn:CreateTexture(nil, "OVERLAY")
+surroundIcon:SetSize(14, 14)
+surroundIcon:SetPoint("CENTER")
+surroundIcon:SetTexture("Interface\\Minimap\\Tracking\\None")
 
 local function UpdateSurroundBtnColor()
     local on = H.db.mapShowSurround ~= false
-    surroundTxt:SetTextColor(on and 0.8 or 0.3, on and 0.2 or 0.3, on and 0.2 or 0.3)
+    surroundIcon:SetDesaturated(not on)
+    surroundIcon:SetAlpha(on and 1 or 0.4)
 end
 
 surroundBtn:SetScript("OnEnter", function(self)
-    surroundTxt:SetTextColor(1, 0.4, 0.4)
+    surroundIcon:SetDesaturated(false)
+    surroundIcon:SetAlpha(1)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
     local on = H.db.mapShowSurround ~= false
     GameTooltip:SetText("Surrounding mobs: " .. (on and "shown" or "hidden"), 1, 1, 1)
@@ -573,15 +564,6 @@ UpdateBlips = function()
     local pull = H.pulls[H.currentPullIdx]
     if not pull or not pull.clonePositions then return end
 
-    -- Pull color
-    local pr, pg, pb = 1, 0.8, 0.2
-    if pull.color then
-        pr = tonumber(pull.color[1]) or 1
-        pg = tonumber(pull.color[2]) or 0.8
-        pb = tonumber(pull.color[3]) or 0.2
-        if pr > 1 or pg > 1 or pb > 1 then pr, pg, pb = pr / 255, pg / 255, pb / 255 end
-    end
-
     local baseScale = GetBaseScale()
     local zoomScale = mapPanel:GetScale() or 1
 
@@ -633,14 +615,14 @@ UpdateBlips = function()
         end
     end
 
-    -- 2) Current pull mobs on top — pull color overlay
+    -- 2) Current pull mobs on top — no color overlay, just portraits
     for _, cp in ipairs(pull.clonePositions) do
         if cp.sublevel == currentSublevel then
             idx = idx + 1
             local blip = GetBlip(idx)
             local sz = BLIP_SIZE / zoomScale
             if cp.isBoss then sz = BLIP_BOSS_SIZE / zoomScale end
-            SetupBlip(blip, cp, baseScale, sz, pr, pg, pb, 0.5)
+            SetupBlip(blip, cp, baseScale, sz, 0, 0, 0, 0)
             blip.isSurrounding = false
             blip:SetFrameLevel(mapPanel:GetFrameLevel() + 5)
         end
@@ -652,26 +634,8 @@ end
 ------------------------------------------------------------------------
 -- Map control buttons (bottom-right overlay on the map area)
 ------------------------------------------------------------------------
-local BTN_SZ = 18
-local BTN_GAP = 2
-
-local function MakeMapBtn(parent, label)
-    local btn = CreateFrame("Frame", nil, parent)
-    btn:SetSize(BTN_SZ, BTN_SZ)
-    btn:EnableMouse(true)
-    local bg = btn:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(0.06, 0.06, 0.06, 0.8)
-    local txt = btn:CreateFontString(nil, "OVERLAY")
-    txt:SetFont(FONT, 10, "OUTLINE")
-    txt:SetPoint("CENTER", 0, 0)
-    txt:SetText(label)
-    txt:SetTextColor(0.6, 0.6, 0.6)
-    btn.txt = txt
-    btn:SetScript("OnEnter", function() txt:SetTextColor(0, 0.8, 1) end)
-    btn:SetScript("OnLeave", function() txt:SetTextColor(0.6, 0.6, 0.6) end)
-    return btn
-end
+local BTN_SZ = 20
+local BTN_GAP = 1
 
 -- Container frame anchored to bottom-right of the map, above resize handle
 local controlBar = CreateFrame("Frame", nil, mf)
@@ -680,38 +644,49 @@ controlBar:SetPoint("BOTTOMRIGHT", -4, 8)
 controlBar:SetFrameLevel(mf:GetFrameLevel() + 8) -- above map, below resize
 
 -- Zoom +
-local zoomInBtn = MakeMapBtn(controlBar, "+")
+local zoomInBtn = CreateFrame("Button", nil, controlBar, "UIPanelButtonTemplate")
+zoomInBtn:SetSize(BTN_SZ, BTN_SZ)
 zoomInBtn:SetPoint("RIGHT", controlBar, "RIGHT", 0, 0)
-zoomInBtn:SetScript("OnMouseDown", function()
+zoomInBtn:SetText("+")
+zoomInBtn:SetNormalFontObject("GameFontNormalSmall")
+zoomInBtn:SetScript("OnClick", function()
     userZoomOffset = userZoomOffset + 0.3
     if UpdateMapPopout then UpdateMapPopout() end
 end)
 
 -- Zoom -
-local zoomOutBtn = MakeMapBtn(controlBar, "-")
+local zoomOutBtn = CreateFrame("Button", nil, controlBar, "UIPanelButtonTemplate")
+zoomOutBtn:SetSize(BTN_SZ, BTN_SZ)
 zoomOutBtn:SetPoint("RIGHT", zoomInBtn, "LEFT", -BTN_GAP, 0)
-zoomOutBtn:SetScript("OnMouseDown", function()
+zoomOutBtn:SetText("-")
+zoomOutBtn:SetNormalFontObject("GameFontNormalSmall")
+zoomOutBtn:SetScript("OnClick", function()
     userZoomOffset = userZoomOffset - 0.3
     if UpdateMapPopout then UpdateMapPopout() end
 end)
 
 -- Reset view
-local resetBtn = MakeMapBtn(controlBar, "R")
+local resetBtn = CreateFrame("Button", nil, controlBar, "UIPanelButtonTemplate")
+resetBtn:SetSize(BTN_SZ, BTN_SZ)
 resetBtn:SetPoint("RIGHT", zoomOutBtn, "LEFT", -BTN_GAP, 0)
-resetBtn:SetScript("OnMouseDown", function()
+resetBtn:SetNormalFontObject("GameFontNormalSmall")
+-- Use a circular arrow icon texture instead of text
+local resetIcon = resetBtn:CreateTexture(nil, "OVERLAY")
+resetIcon:SetSize(12, 12)
+resetIcon:SetPoint("CENTER")
+resetIcon:SetTexture("Interface\\Buttons\\UI-RefreshButton")
+resetBtn:SetScript("OnClick", function()
     userZoomOffset = 0
     userPanOffsetX = 0
     userPanOffsetY = 0
     if UpdateMapPopout then UpdateMapPopout() end
 end)
 resetBtn:SetScript("OnEnter", function(self)
-    resetBtn.txt:SetTextColor(0, 0.8, 1)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     GameTooltip:SetText("Reset view", 1, 1, 1)
     GameTooltip:Show()
 end)
 resetBtn:SetScript("OnLeave", function()
-    resetBtn.txt:SetTextColor(0.6, 0.6, 0.6)
     GameTooltip:Hide()
 end)
 
