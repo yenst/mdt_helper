@@ -83,19 +83,16 @@ surroundBtn:SetPoint("RIGHT", closeBtn, "LEFT", -2, 0)
 local surroundIcon = surroundBtn:CreateTexture(nil, "ARTWORK")
 surroundIcon:SetSize(14, 14)
 surroundIcon:SetPoint("CENTER")
-surroundIcon:SetTexture("Interface\\Minimap\\Tracking\\None")
+surroundIcon:SetAtlas("Waypoint-MapPin-Untracked", false)
 surroundBtn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
 surroundBtn:GetHighlightTexture():SetAlpha(0.3)
 
 local function UpdateSurroundBtnColor()
     local on = H.db.mapShowSurround ~= false
-    surroundIcon:SetDesaturated(not on)
-    surroundIcon:SetAlpha(on and 1 or 0.4)
+    surroundIcon:SetAtlas(on and "Waypoint-MapPin-Untracked" or "Waypoint-MapPin-Tracked", false)
 end
 
 surroundBtn:SetScript("OnEnter", function(self)
-    surroundIcon:SetDesaturated(false)
-    surroundIcon:SetAlpha(1)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
     local on = H.db.mapShowSurround ~= false
     GameTooltip:SetText("Surrounding mobs: " .. (on and "shown" or "hidden"), 1, 1, 1)
@@ -659,7 +656,7 @@ zoomInBtn:SetPoint("RIGHT", controlBar, "RIGHT", 0, 0)
 local zoomInTex = zoomInBtn:CreateTexture(nil, "ARTWORK")
 zoomInTex:SetSize(14, 14)
 zoomInTex:SetPoint("CENTER")
-zoomInTex:SetAtlas("uitools-icon-plus", false)
+zoomInTex:SetAtlas("UI-HUD-Minimap-Zoom-In", false)
 zoomInBtn:SetScript("OnClick", function()
     userZoomOffset = userZoomOffset + 0.3
     if UpdateMapPopout then UpdateMapPopout() end
@@ -677,7 +674,7 @@ zoomOutBtn:SetPoint("RIGHT", zoomInBtn, "LEFT", -BTN_GAP, 0)
 local zoomOutTex = zoomOutBtn:CreateTexture(nil, "ARTWORK")
 zoomOutTex:SetSize(14, 14)
 zoomOutTex:SetPoint("CENTER")
-zoomOutTex:SetAtlas("uitools-icon-minus", false)
+zoomOutTex:SetAtlas("UI-HUD-Minimap-Zoom-Out", false)
 zoomOutBtn:SetScript("OnClick", function()
     userZoomOffset = userZoomOffset - 0.3
     if UpdateMapPopout then UpdateMapPopout() end
@@ -695,7 +692,7 @@ resetBtn:SetPoint("RIGHT", zoomOutBtn, "LEFT", -BTN_GAP, 0)
 local resetTex = resetBtn:CreateTexture(nil, "ARTWORK")
 resetTex:SetSize(14, 14)
 resetTex:SetPoint("CENTER")
-resetTex:SetAtlas("uitools-icon-refresh", false)
+resetTex:SetAtlas("UI-RefreshButton", false)
 resetBtn:SetScript("OnClick", function()
     userZoomOffset = 0
     userPanOffsetX = 0

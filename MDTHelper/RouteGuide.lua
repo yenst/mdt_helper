@@ -205,7 +205,7 @@ end)
 -- Map popout button (minimap tracking icon)
 local mapBtn = IconBtn(headerBg)
 mapBtn:SetPoint("LEFT", shareBtn, "RIGHT", 2, 0)
-SetBtnTexture(mapBtn, "Interface\\Minimap\\Tracking\\None", 14)
+SetBtnAtlas(mapBtn, "poi-islands-table", 14)
 mapBtn:SetScript("OnEnter", function(s)
     GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
     GameTooltip:SetText("Map Popout", 0, 0.8, 1)
@@ -220,16 +220,9 @@ end)
 -- Auto-advance toggle (green arrow = on, rotated to play-style right arrow)
 local autoBtn = IconBtn(headerBg)
 autoBtn:SetPoint("LEFT", mapBtn, "RIGHT", 2, 0)
-local autoIcon = SetBtnAtlas(autoBtn, "bags-greenarrow", 12)
-autoIcon:SetRotation(-math.pi / 2) -- point right like a "play" arrow
+local autoIcon = SetBtnAtlas(autoBtn, "Warfronts-BaseMapIcons-Empty-Heroes-Minimap", 12)
 local function UpdateAutoBtnColor()
-    if H.db.autoAdvance then
-        autoBtn._icon:SetVertexColor(0.3, 1, 0.3)
-        autoBtn._icon:SetAlpha(1)
-    else
-        autoBtn._icon:SetVertexColor(1, 0.3, 0.3)
-        autoBtn._icon:SetAlpha(0.6)
-    end
+    autoIcon:SetAtlas(H.db.autoAdvance and "Warfronts-BaseMapIcons-Alliance-ConstructionHeroes-Minimap" or "Warfronts-BaseMapIcons-Empty-Heroes-Minimap", false)
 end
 UpdateAutoBtnColor()
 autoBtn:SetScript("OnEnter", function(s)
@@ -250,8 +243,7 @@ end)
 -- Minimize/expand button (arrow pointing down/up)
 local minBtn = IconBtn(headerBg)
 minBtn:SetPoint("TOPRIGHT", headerBg, "TOPRIGHT", -52, -3)
-local minIcon = SetBtnAtlas(minBtn, "bags-greenarrow", 12)
-minIcon:SetRotation(math.pi) -- point down = minimize
+local minIcon = SetBtnAtlas(minBtn, "UI-HUD-Minimap-Zoom-Out", 12)
 minBtn:SetScript("OnClick", function()
     H.db.minimized = not H.db.minimized
     H:UpdateUI()
@@ -260,15 +252,14 @@ end)
 -- Previous pull (arrow pointing left)
 local prevBtn = IconBtn(headerBg)
 prevBtn:SetPoint("TOPRIGHT", headerBg, "TOPRIGHT", -28, -3)
-local prevIcon = SetBtnAtlas(prevBtn, "bags-greenarrow", 12)
-prevIcon:SetRotation(math.pi / 2) -- point left
+local prevIcon = SetBtnAtlas(prevBtn, "shop-icon-carousel-next-hover", 12)
+prevIcon:SetTexCoord(1, 0, 0, 1) -- mirror horizontally to point left
 prevBtn:SetScript("OnClick", function() H:RetreatPull() end)
 
 -- Next pull (arrow pointing right)
 local nextBtn = IconBtn(headerBg)
 nextBtn:SetPoint("TOPRIGHT", headerBg, "TOPRIGHT", -4, -3)
-local nextIcon = SetBtnAtlas(nextBtn, "bags-greenarrow", 12)
-nextIcon:SetRotation(-math.pi / 2) -- point right
+local nextIcon = SetBtnAtlas(nextBtn, "shop-icon-carousel-next-hover", 12)
 nextBtn:SetScript("OnClick", function() H:AdvancePull() end)
 
 ------------------------------------------------------------------------
@@ -636,7 +627,7 @@ function H:_DoUpdateUI()
     local minimized = self.db.minimized
 
     -- Update minimize button icon direction
-    minIcon:SetRotation(minimized and 0 or math.pi) -- up arrow = expand, down arrow = minimize
+    minIcon:SetAtlas(minimized and "UI-HUD-Minimap-Zoom-In" or "UI-HUD-Minimap-Zoom-Out", false)
 
     -- Header
     headerText:SetText("Pull " .. cur .. " / " .. total .. " |r")
