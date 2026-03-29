@@ -367,6 +367,159 @@ local function HideAllBlips()
     activeBlipCount = 0
 end
 
+local GetBaseScale -- forward declare; defined in "Zoom to pull" section
+
+------------------------------------------------------------------------
+-- Pull outline drawing (convex hull, same approach as MDT PullOutlines)
+------------------------------------------------------------------------
+local OUTLINE_ALPHA = 0.8
+
+local function hullIsLowerLeft(a, b)
+    if a[1] < b[1] then return true end
+    if a[1] > b[1] then return false end
+    return a[2] < b[2]
+end
+
+local function hullIsLeftOf(a, b, c)
+    return (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]) < 0
+end
+
+local function ComputeConvexHull(pts)
+    if not pts or #pts == 0 then return nil end
+    if #pts <= 2 then return pts end
+    local ll = 1
+    for i = 2, #pts do
+        if not pts[i][1] or not pts[ll][1] then return nil end
+        if hullIsLowerLeft(pts[i], pts[ll]) then ll = i end
+    end
+    local hull, final, tries = {}, 1, 0
+    repeat
+        hull[#hull + 1] = ll
+        final = 1
+        for j = 2, #pts do
+            if ll == final or hullIsLeftOf(pts[ll], pts[final], pts[j]) then final = j end
+        end
+        ll = final
+        tries = tries + 1
+    until final == hull[1] or tries > 100
+    local out = {}
+    for _, idx in ipairs(hull) do out[#out + 1] = pts[idx] end
+    return out
+end
+
+local function ComputeCentroid(pts)
+    local rx, ry = 0, 0
+    for _, v in ipairs(pts) do
+        if not v[1] or not v[2] then return nil end
+        rx, ry = rx + v[1], ry + v[2]
+    end
+    return rx / #pts, ry / #pts
+end
+
+local function ExpandPolygon(poly, nPts, radius)
+    local res = {}
+    for i = 1, #poly do
+        local x, y = poly[i][1], poly[i][2]
+        if not x or not y then return nil end
+        for j = 1, nPts do
+            res[#res + 1] = {
+                x + radius * math.cos(2 * math.pi / nPts * j),
+                y + radius * math.sin(2 * math.pi / nPts * j),
+            }
+        end
+    end
+    return res
+end
+
+-- Texture pools for hull outlines
+local hullTextures, hullPool = {}, {}
+local SQUARE_TEX = "Interface\\AddOns\\MythicDungeonTools\\Textures\\Square_White"
+local CIRCLE_TEX = "Interface\\AddOns\\MythicDungeonTools\\Textures\\Circle_White"
+
+local function GetHullTex()
+    if #hullPool > 0 then
+        local t = table.remove(hullPool)
+        t:SetRotation(0)
+        t:SetTexCoord(0, 1, 0, 1)
+        t:ClearAllPoints()
+        return t
+    end
+    return mapPanel:CreateTexture(nil, "ARTWORK", nil, -5)
+end
+
+local function ReleaseOutlines()
+    for i = #hullTextures, 1, -1 do
+        hullTextures[i]:Hide()
+        hullPool[#hullPool + 1] = hullTextures[i]
+        hullTextures[i] = nil
+    end
+end
+
+local function DrawOutlineCircle(x, y, sz, r, g, b, a)
+    local t = GetHullTex()
+    t:SetTexture(CIRCLE_TEX)
+    t:SetVertexColor(r, g, b, a)
+    t:SetSize(sz * 1.1, sz * 1.1)
+    t:SetPoint("CENTER", tiles4[1], "TOPLEFT", x, y)
+    t:Show()
+    hullTextures[#hullTextures + 1] = t
+end
+
+local function DrawOutlineLine(x1, y1, x2, y2, thickness, r, g, b, a)
+    local t = GetHullTex()
+    t:SetTexture(SQUARE_TEX)
+    t:SetVertexColor(r, g, b, a)
+    DrawLine(t, tiles4[1], x1, y1, x2, y2, thickness, 1.1, "TOPLEFT")
+    t:Show()
+    hullTextures[#hullTextures + 1] = t
+    DrawOutlineCircle(x1, y1, thickness * 0.9, r, g, b, a)
+end
+
+local UpdateOutlines -- forward declare
+
+UpdateOutlines = function()
+    ReleaseOutlines()
+    if not H.pulls or not H.currentPullIdx then return end
+
+    local pull = H.pulls[H.currentPullIdx]
+    if not pull or not pull.clonePositions or #pull.clonePositions == 0 then return end
+
+    local baseScale = GetBaseScale()
+    local zoomScale = mapPanel:GetScale() or 1
+
+    -- Collect vertices in mapPanel coordinates
+    local verts = {}
+    for _, cp in ipairs(pull.clonePositions) do
+        if cp.sublevel == currentSublevel then
+            verts[#verts + 1] = { cp.x * baseScale, cp.y * baseScale }
+        end
+    end
+    if #verts == 0 then return end
+
+    -- Pull color (default cyan)
+    local cr, cg, cb = 0, 0.8, 1
+    if pull.color and pull.color[1] then cr, cg, cb = pull.color[1], pull.color[2], pull.color[3] end
+
+    local thickness = 2 / zoomScale
+    local expandR = (BLIP_SIZE / 2 + 5) / zoomScale
+
+    -- Compute hull → expand → recompute for smooth rounded outline
+    local hull = ComputeConvexHull(verts)
+    if not hull then return end
+    local expanded = ExpandPolygon(hull, 20, expandR)
+    if not expanded then return end
+    hull = ComputeConvexHull(expanded)
+    if not hull or #hull < 2 then return end
+
+    -- Draw outline segments with smooth corners
+    for i = 1, #hull do
+        local a = hull[i]
+        local b = (i < #hull) and hull[i + 1] or hull[1]
+        DrawOutlineLine(a[1], a[2], b[1], b[2], thickness, cr, cg, cb, OUTLINE_ALPHA)
+    end
+
+end
+
 ------------------------------------------------------------------------
 -- Sublevel detection
 ------------------------------------------------------------------------
@@ -450,7 +603,7 @@ end
 ------------------------------------------------------------------------
 -- Zoom to pull
 ------------------------------------------------------------------------
-local function GetBaseScale()
+GetBaseScale = function()
     local sw = scrollFrame:GetWidth()
     if sw <= 0 then return 1 end
     return sw / MDT_W
@@ -753,6 +906,7 @@ resizeHandle:SetScript("OnUpdate", function()
     local pull = H.pulls and H.pulls[H.currentPullIdx]
     if pull then
         ZoomToPull(pull)
+        UpdateOutlines()
         UpdateBlips()
     end
 end)
@@ -815,6 +969,7 @@ UpdateMapPopout = function()
 
     ApplyMapOpacity(H.db.bgAlpha or 1)
     ZoomToPull(pull)
+    UpdateOutlines()
     UpdateBlips()
 end
 
