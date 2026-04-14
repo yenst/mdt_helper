@@ -240,6 +240,178 @@ autoBtn:SetScript("OnClick", function()
     print("|cff00ccffMDTHelper|r: Auto-advance " .. state)
 end)
 
+-- Dungeon selector button (dropdown to manually pick dungeon)
+local dungeonSelBtn = IconBtn(headerBg)
+dungeonSelBtn:SetPoint("LEFT", autoBtn, "RIGHT", 2, 0)
+SetBtnTexture(dungeonSelBtn, "Interface\\ChatFrame\\UI-ChatIcon-ScrollDown-Up", 12)
+
+------------------------------------------------------------------------
+-- Dungeon dropdown
+------------------------------------------------------------------------
+local DD_W = 200
+local DD_BTN_H = 20
+local DD_MAX_VISIBLE = 15
+
+-- Full-screen overlay to close dropdown when clicking outside
+local ddOverlay = CreateFrame("Button", nil, UIParent)
+ddOverlay:SetFrameStrata("DIALOG")
+ddOverlay:SetAllPoints()
+ddOverlay:RegisterForClicks("LeftButtonUp")
+ddOverlay:SetFrameLevel(1)
+ddOverlay:Hide()
+
+local dungeonDD = CreateFrame("Frame", "MDTHelperDungeonDD", UIParent, "BackdropTemplate")
+dungeonDD:SetFrameStrata("DIALOG")
+dungeonDD:SetFrameLevel(10)
+dungeonDD:SetClampedToScreen(true)
+dungeonDD:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Buttons\\WHITE8X8",
+    edgeSize = 1,
+})
+dungeonDD:SetBackdropColor(0.06, 0.06, 0.06, 0.95)
+dungeonDD:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
+dungeonDD:Hide()
+tinsert(UISpecialFrames, "MDTHelperDungeonDD")
+
+ddOverlay:SetScript("OnClick", function() dungeonDD:Hide() end)
+dungeonDD:SetScript("OnShow", function() ddOverlay:Show() end)
+dungeonDD:SetScript("OnHide", function() ddOverlay:Hide() end)
+
+-- Scrollable content area
+local ddClip = CreateFrame("Frame", nil, dungeonDD)
+ddClip:SetPoint("TOPLEFT", 2, -2)
+ddClip:SetPoint("BOTTOMRIGHT", -2, 2)
+ddClip:SetClipsChildren(true)
+
+local ddContent = CreateFrame("Frame", nil, ddClip)
+ddContent:SetPoint("TOPLEFT")
+ddContent:SetSize(DD_W - 4, 1)
+
+local ddScrollOff = 0
+dungeonDD:EnableMouseWheel(true)
+dungeonDD:SetScript("OnMouseWheel", function(_, delta)
+    local contentH = ddContent:GetHeight()
+    local viewH = ddClip:GetHeight()
+    local maxOff = math.max(0, contentH - viewH)
+    ddScrollOff = math.max(0, math.min(ddScrollOff - delta * DD_BTN_H * 3, maxOff))
+    ddContent:SetPoint("TOPLEFT", 0, ddScrollOff)
+end)
+
+local ddButtons = {}
+
+local function MakeDDButton()
+    local btn = CreateFrame("Button", nil, ddContent)
+    btn:SetSize(DD_W - 4, DD_BTN_H)
+    btn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
+    btn:GetHighlightTexture():SetAlpha(0.2)
+
+    btn.check = btn:CreateFontString(nil, "OVERLAY")
+    btn.check:SetFont(FONT, 8, "OUTLINE")
+    btn.check:SetPoint("LEFT", 4, 0)
+    btn.check:SetWidth(10)
+    btn.check:SetTextColor(0, 0.8, 1)
+
+    btn.label = btn:CreateFontString(nil, "OVERLAY")
+    btn.label:SetFont(FONT, 9, "OUTLINE")
+    btn.label:SetPoint("LEFT", 14, 0)
+    btn.label:SetPoint("RIGHT", -4, 0)
+    btn.label:SetJustifyH("LEFT")
+    btn.label:SetWordWrap(false)
+
+    return btn
+end
+
+local function ShowDungeonDropdown()
+    local list = H:GetDungeonList()
+    if #list == 0 then
+        print("|cff00ccffMDTHelper|r: No dungeon data from MDT")
+        return
+    end
+
+    local currentIdx
+    if MDT and MDT.GetDB then
+        local db = MDT:GetDB()
+        if db then currentIdx = db.currentDungeonIdx end
+    end
+    local isOverride = H.db.dungeonOverride ~= nil
+    local totalEntries = #list + 1 -- +1 for "Auto"
+
+    -- Ensure enough buttons exist
+    for i = #ddButtons + 1, totalEntries do
+        ddButtons[i] = MakeDDButton()
+    end
+
+    -- "Auto" option at the top
+    local ab = ddButtons[1]
+    ab:SetPoint("TOPLEFT", 0, 0)
+    ab.label:SetText("Auto (detect from zone)")
+    ab.label:SetTextColor(0.5, 0.8, 1)
+    ab.check:SetText(not isOverride and ">" or "")
+    ab:SetScript("OnClick", function()
+        H:SetDungeonOverride(nil)
+        dungeonDD:Hide()
+    end)
+    ab:Show()
+
+    -- Dungeon entries
+    for i, info in ipairs(list) do
+        local btn = ddButtons[i + 1]
+        btn:SetPoint("TOPLEFT", 0, -(i * DD_BTN_H))
+        btn.label:SetText(info.name)
+        btn.label:SetTextColor(1, 1, 1)
+
+        local sel = (isOverride and info.idx == H.db.dungeonOverride)
+            or (not isOverride and info.idx == currentIdx)
+        btn.check:SetText(sel and ">" or "")
+
+        local idx = info.idx
+        btn:SetScript("OnClick", function()
+            H:SetDungeonOverride(idx)
+            dungeonDD:Hide()
+        end)
+        btn:Show()
+    end
+
+    -- Hide extra buttons from previous showing
+    for i = totalEntries + 1, #ddButtons do
+        ddButtons[i]:Hide()
+    end
+
+    -- Size and position
+    local contentH = totalEntries * DD_BTN_H
+    ddContent:SetHeight(contentH)
+    local visH = math.min(contentH + 4, DD_MAX_VISIBLE * DD_BTN_H + 4)
+    dungeonDD:SetSize(DD_W, visH)
+    dungeonDD:SetScale(f:GetScale())
+    dungeonDD:ClearAllPoints()
+    dungeonDD:SetPoint("TOPLEFT", dungeonSelBtn, "BOTTOMLEFT", 0, -2)
+
+    ddScrollOff = 0
+    ddContent:SetPoint("TOPLEFT", 0, 0)
+
+    dungeonDD:Show()
+end
+
+-- Button tooltip and click
+dungeonSelBtn:SetScript("OnEnter", function(s)
+    GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
+    local name = H:GetCurrentDungeonName() or "Unknown"
+    local mode = H.db.dungeonOverride and "|cffff8800Manual|r" or "|cff00ff00Auto|r"
+    GameTooltip:SetText("Dungeon: " .. name, 0, 0.8, 1)
+    GameTooltip:AddLine("Mode: " .. mode, 0.7, 0.7, 0.7)
+    GameTooltip:AddLine("Click to select dungeon", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end)
+dungeonSelBtn:SetScript("OnLeave", GameTooltip_Hide)
+dungeonSelBtn:SetScript("OnClick", function()
+    if dungeonDD:IsShown() then
+        dungeonDD:Hide()
+    else
+        ShowDungeonDropdown()
+    end
+end)
+
 -- Minimize/expand button (arrow pointing down/up)
 local minBtn = IconBtn(headerBg)
 minBtn:SetPoint("TOPRIGHT", headerBg, "TOPRIGHT", -52, -3)
@@ -620,6 +792,15 @@ function H:_DoUpdateUI()
     f:SetScale(self.db.uiScale or 1)
     ApplyOpacity(self.db.bgAlpha or 1)
     UpdateAutoBtnColor()
+
+    -- Highlight dungeon button orange when manually overridden
+    if dungeonSelBtn._icon then
+        if self.db.dungeonOverride then
+            dungeonSelBtn._icon:SetVertexColor(1, 0.5, 0)
+        else
+            dungeonSelBtn._icon:SetVertexColor(0.7, 0.7, 0.7)
+        end
+    end
 
     local total = self:GetPullCount()
     local cur = self.currentPullIdx

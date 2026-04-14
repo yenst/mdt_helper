@@ -137,24 +137,87 @@ end
 -- Sync MDT to the dungeon the player is currently in
 ------------------------------------------------------------------------
 function H:SyncMDTDungeon()
-    if not MDT or not MDT.zoneIdToDungeonIdx or not MDT.GetDB then return end
-
-    -- Try zone-based lookup first (covers all dungeons MDT knows about)
-    local zoneId = C_Map.GetBestMapForUnit("player")
-    local dungeonIdx = zoneId and MDT.zoneIdToDungeonIdx[zoneId]
-
-    if not dungeonIdx then return end
+    if not MDT or not MDT.GetDB then return end
 
     local db = MDT:GetDB()
     if not db then return end
 
+    local dungeonIdx
+    if self.db.dungeonOverride then
+        -- Validate the override still exists in MDT
+        if MDT.dungeonEnemies and MDT.dungeonEnemies[self.db.dungeonOverride] then
+            dungeonIdx = self.db.dungeonOverride
+        else
+            self.db.dungeonOverride = nil
+        end
+    end
+
+    if not dungeonIdx then
+        -- Auto-detect from zone
+        if not MDT.zoneIdToDungeonIdx then return end
+        local zoneId = C_Map.GetBestMapForUnit("player")
+        dungeonIdx = zoneId and MDT.zoneIdToDungeonIdx[zoneId]
+    end
+
+    if not dungeonIdx then return end
+
     if db.currentDungeonIdx ~= dungeonIdx then
         db.currentDungeonIdx = dungeonIdx
-        -- Also call UpdateToDungeon if available, so MDT fully switches
         if MDT.UpdateToDungeon then
             pcall(MDT.UpdateToDungeon, MDT, dungeonIdx)
         end
     end
+end
+
+------------------------------------------------------------------------
+-- Dungeon list & manual override
+------------------------------------------------------------------------
+function H:GetDungeonList()
+    if not MDT or not MDT.dungeonList then return {} end
+
+    -- Use current season's dungeon indices if available
+    local allowedIdx
+    if MDT.dungeonSelectionToIndex and #MDT.dungeonSelectionToIndex > 0 then
+        allowedIdx = {}
+        -- First entry is the current season for retail
+        local seasonDungeons = MDT.dungeonSelectionToIndex[1]
+        if seasonDungeons then
+            for _, idx in ipairs(seasonDungeons) do
+                allowedIdx[idx] = true
+            end
+        end
+    end
+
+    local list = {}
+    for idx, name in pairs(MDT.dungeonList) do
+        if type(idx) == "number" and type(name) == "string" and name ~= "" then
+            if not allowedIdx or allowedIdx[idx] then
+                local clean = name:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+                if clean ~= "" and MDT.dungeonEnemies and MDT.dungeonEnemies[idx] then
+                    list[#list + 1] = { idx = idx, name = clean }
+                end
+            end
+        end
+    end
+    table.sort(list, function(a, b) return a.name < b.name end)
+    return list
+end
+
+function H:GetCurrentDungeonName()
+    if not MDT or not MDT.GetDB then return nil end
+    local db = MDT:GetDB()
+    if not db or not db.currentDungeonIdx then return nil end
+    if MDT.dungeonList and MDT.dungeonList[db.currentDungeonIdx] then
+        local name = MDT.dungeonList[db.currentDungeonIdx]
+        return name:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    end
+    return nil
+end
+
+function H:SetDungeonOverride(idx)
+    self.db.dungeonOverride = idx
+    self:SyncMDTDungeon()
+    self:BuildRoute()
 end
 
 ------------------------------------------------------------------------
@@ -168,6 +231,7 @@ function H:CheckInstance()
         self:BuildRoute()
     else
         self.activeDungeon = false
+        self.db.dungeonOverride = nil
         self.keyCompleted = false
         wipe(self.pulls)
         wipe(self.npcKills)
