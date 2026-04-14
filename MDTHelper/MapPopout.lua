@@ -108,6 +108,41 @@ surroundBtn:SetScript("OnMouseDown", function()
     if UpdateMapPopout then UpdateMapPopout() end
 end)
 
+-- Full route toggle button (in title bar, next to surround toggle)
+local fullRouteBtn = CreateFrame("Button", nil, titleBar)
+fullRouteBtn:SetSize(16, 16)
+fullRouteBtn:SetPoint("RIGHT", surroundBtn, "LEFT", -2, 0)
+fullRouteBtn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
+fullRouteBtn:GetHighlightTexture():SetAlpha(0.3)
+local fullRouteIcon = fullRouteBtn:CreateTexture(nil, "ARTWORK")
+fullRouteIcon:SetSize(14, 14)
+fullRouteIcon:SetPoint("CENTER")
+
+local function UpdateFullRouteBtnColor()
+    if H.db.mapFullRoute then
+        fullRouteIcon:SetAtlas("orderhall-commandbar-mapbutton-down", false)
+    else
+        fullRouteIcon:SetAtlas("orderhall-commandbar-mapbutton-up", false)
+    end
+end
+
+fullRouteBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    local on = H.db.mapFullRoute
+    GameTooltip:SetText("Full route: " .. (on and "all pulls" or "current pull only"), 1, 1, 1)
+    GameTooltip:AddLine("Toggle between current pull and full route view", 0.7, 0.7, 0.7)
+    GameTooltip:Show()
+end)
+fullRouteBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+fullRouteBtn:SetScript("OnMouseDown", function()
+    H.db.mapFullRoute = not H.db.mapFullRoute
+    userZoomOffset = 0
+    userPanOffsetX = 0
+    userPanOffsetY = 0
+    UpdateFullRouteBtnColor()
+    if UpdateMapPopout then UpdateMapPopout() end
+end)
+
 titleBar:SetScript("OnMouseDown", function(_, btn)
     if btn == "LeftButton" and not H.db.locked then mf:StartMoving() end
 end)
@@ -367,7 +402,32 @@ local function HideAllBlips()
     activeBlipCount = 0
 end
 
+------------------------------------------------------------------------
+-- Pull number label pool — frames that hide on hover so blips get clicks
+------------------------------------------------------------------------
+local pullLabels = {}
+local activeLabelCount = 0
+
+local function GetPullLabel(idx)
+    if pullLabels[idx] then return pullLabels[idx] end
+    local lf = CreateFrame("Frame", nil, mapPanel)
+    lf:SetSize(24, 18)
+    lf:SetFrameLevel(mapPanel:GetFrameLevel() + 20)
+    lf:EnableMouse(false) -- pass through mouse to blips below
+    lf.text = lf:CreateFontString(nil, "OVERLAY")
+    lf.text:SetPoint("CENTER")
+    lf:Hide()
+    pullLabels[idx] = lf
+    return lf
+end
+
+local function HideAllLabels()
+    for i = 1, activeLabelCount do pullLabels[i]:Hide() end
+    activeLabelCount = 0
+end
+
 local GetBaseScale -- forward declare; defined in "Zoom to pull" section
+local UpdateAllOutlines -- forward declare; defined after UpdateOutlines
 
 ------------------------------------------------------------------------
 -- Pull outline drawing (convex hull, same approach as MDT PullOutlines)
@@ -521,6 +581,67 @@ UpdateOutlines = function()
 end
 
 ------------------------------------------------------------------------
+-- Full route outlines — all pulls at once
+------------------------------------------------------------------------
+UpdateAllOutlines = function()
+    ReleaseOutlines()
+    if not H.pulls then return end
+
+    local baseScale = GetBaseScale()
+    local zoomScale = mapPanel:GetScale() or 1
+
+    -- Draw non-current pulls first (below), then current pull on top
+    for pass = 1, 2 do
+        for pullIdx, pull in ipairs(H.pulls) do
+            local isCurrent = (pullIdx == H.currentPullIdx)
+            if (pass == 1 and not isCurrent) or (pass == 2 and isCurrent) then
+                if pull.clonePositions and #pull.clonePositions > 0 then
+                    local verts = {}
+                    for _, cp in ipairs(pull.clonePositions) do
+                        if cp.sublevel == currentSublevel then
+                            verts[#verts + 1] = { cp.x * baseScale, cp.y * baseScale }
+                        end
+                    end
+                    if #verts > 0 then
+                        -- Current pull: cyan, others: white
+                        local cr, cg, cb = 1, 1, 1
+                        local alpha, thickness
+                        if isCurrent then
+                            cr, cg, cb = 0, 0.8, 1
+                            alpha = 1.0
+                            thickness = 4 / zoomScale
+                        elseif pull.completed then
+                            alpha = 0.35
+                            thickness = 1.5 / zoomScale
+                        else
+                            alpha = 0.6
+                            thickness = 2 / zoomScale
+                        end
+
+                        local expandR = (BLIP_SIZE / 2 + 5) / zoomScale
+
+                        local hull = ComputeConvexHull(verts)
+                        if hull then
+                            local expanded = ExpandPolygon(hull, 20, expandR)
+                            if expanded then
+                                hull = ComputeConvexHull(expanded)
+                                if hull and #hull >= 2 then
+                                    for i = 1, #hull do
+                                        local a = hull[i]
+                                        local b = (i < #hull) and hull[i + 1] or hull[1]
+                                        DrawOutlineLine(a[1], a[2], b[1], b[2], thickness, cr, cg, cb, alpha)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+------------------------------------------------------------------------
 -- Sublevel detection
 ------------------------------------------------------------------------
 local function GetPullSublevel(pull)
@@ -555,6 +676,8 @@ local function UpdateSublevelHighlight()
 end
 
 local UpdateBlips -- forward declare
+local UpdateFullRouteBlips -- forward declare
+local UpdateFullRouteLabels -- forward declare
 
 local function UpdateSublevelButtons(dungeonIdx)
     for _, btn in ipairs(sublevelButtons) do btn:Hide() end
@@ -579,7 +702,13 @@ local function UpdateSublevelButtons(dungeonIdx)
                 if not H.dungeonIdx then return end
                 LoadMapTextures(H.dungeonIdx, self.idx)
                 UpdateSublevelHighlight()
-                if UpdateBlips then UpdateBlips() end
+                if H.db.mapFullRoute then
+                    if UpdateAllOutlines then UpdateAllOutlines() end
+                    if UpdateFullRouteBlips then UpdateFullRouteBlips() end
+                    if UpdateFullRouteLabels then UpdateFullRouteLabels() end
+                else
+                    if UpdateBlips then UpdateBlips() end
+                end
             end)
             btn:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
@@ -594,7 +723,7 @@ local function UpdateSublevelButtons(dungeonIdx)
         sublevelButtons[i].text:SetText(tostring(i))
         sublevelButtons[i].idx = i
         sublevelButtons[i]:ClearAllPoints()
-        sublevelButtons[i]:SetPoint("RIGHT", surroundBtn, "LEFT", -4 - (#sublevels - i) * 20, 0)
+        sublevelButtons[i]:SetPoint("RIGHT", fullRouteBtn, "LEFT", -4 - (#sublevels - i) * 20, 0)
         sublevelButtons[i]:Show()
     end
     UpdateSublevelHighlight()
@@ -669,6 +798,80 @@ local function ZoomToPull(pull)
     local maxScrollV = (panelH * zoomScale - panelH) / zoomScale
     if maxScrollH < 0 then maxScrollH = 0 end
     if maxScrollV < 0 then maxScrollV = 0 end
+    if scrollH < 0 then scrollH = 0 end
+    if scrollH > maxScrollH then scrollH = maxScrollH end
+    if scrollV < 0 then scrollV = 0 end
+    if scrollV > maxScrollV then scrollV = maxScrollV end
+
+    scrollFrame:SetHorizontalScroll(scrollH)
+    scrollFrame:SetVerticalScroll(scrollV)
+end
+
+------------------------------------------------------------------------
+-- Zoom for full route mode — show entire map
+------------------------------------------------------------------------
+local FULL_ROUTE_ZOOM_BORDER = 60 -- slightly wider than single-pull (50) for surrounding context
+
+local function ZoomToFullRoute()
+    local sw = scrollFrame:GetWidth()
+    local sh = scrollFrame:GetHeight()
+    if sw <= 0 or sh <= 0 then return end
+
+    local baseScale = sw / MDT_W
+    local panelW = MDT_W * baseScale
+    local panelH = MDT_H * baseScale
+    mapPanel:SetSize(panelW, panelH)
+    ResizeTiles(panelW)
+
+    -- Center on the current pull's bounding box with generous padding
+    local pull = H.pulls and H.pulls[H.currentPullIdx]
+    local minX, maxX, minY, maxY
+    if pull and pull.clonePositions then
+        for _, cp in ipairs(pull.clonePositions) do
+            if cp.sublevel == currentSublevel then
+                if not minX or cp.x < minX then minX = cp.x end
+                if not maxX or cp.x > maxX then maxX = cp.x end
+                if not minY or cp.y < minY then minY = cp.y end
+                if not maxY or cp.y > maxY then maxY = cp.y end
+            end
+        end
+    end
+
+    if not minX then
+        -- No current pull on this sublevel — show whole map
+        mapPanel:SetScale(1)
+        scrollFrame:SetHorizontalScroll(0)
+        scrollFrame:SetVerticalScroll(0)
+        return
+    end
+
+    -- Wide padding so you see surrounding pulls too
+    minX = minX - FULL_ROUTE_ZOOM_BORDER
+    maxX = maxX + FULL_ROUTE_ZOOM_BORDER
+    minY = minY - FULL_ROUTE_ZOOM_BORDER
+    maxY = maxY + FULL_ROUTE_ZOOM_BORDER
+
+    local diffX = maxX - minX
+    local diffY = -(minY - maxY)
+    if diffX < 1 then diffX = 1 end
+    if diffY < 1 then diffY = 1 end
+
+    local zoomScale = math.min(sw / (diffX * baseScale), sh / (diffY * baseScale))
+    zoomScale = zoomScale + userZoomOffset
+    if zoomScale < 0.5 then zoomScale = 0.5 end
+    if zoomScale > 10 then zoomScale = 10 end
+
+    mapPanel:SetScale(zoomScale)
+
+    local centerX = (minX + maxX) / 2 * baseScale
+    local centerY = -(minY + maxY) / 2 * baseScale
+
+    local scrollH = centerX - sw / (2 * zoomScale) + userPanOffsetX
+    local scrollV = centerY - sh / (2 * zoomScale) + userPanOffsetY
+
+    -- Clamp
+    local maxScrollH = math.max(0, (panelW * zoomScale - panelW) / zoomScale)
+    local maxScrollV = math.max(0, (panelH * zoomScale - panelH) / zoomScale)
     if scrollH < 0 then scrollH = 0 end
     if scrollH > maxScrollH then scrollH = maxScrollH end
     if scrollV < 0 then scrollV = 0 end
@@ -783,6 +986,120 @@ UpdateBlips = function()
 end
 
 ------------------------------------------------------------------------
+-- Full route blip rendering — all pulls at once
+------------------------------------------------------------------------
+UpdateFullRouteBlips = function()
+    HideAllBlips()
+    if not H.allClonePositions then return end
+
+    local allClones = H.allClonePositions[currentSublevel]
+    if not allClones then return end
+
+    -- Build lookup: clone key -> pullIdx (first pull that contains it)
+    local cloneKeyToPull = {}
+    for pullIdx, pull in ipairs(H.pulls) do
+        if pull.clonePositions then
+            for _, cp in ipairs(pull.clonePositions) do
+                if cp.enemyIdx and cp.cloneIdx then
+                    local key = cp.enemyIdx .. "_" .. cp.cloneIdx
+                    if not cloneKeyToPull[key] then
+                        cloneKeyToPull[key] = pullIdx
+                    end
+                end
+            end
+        end
+    end
+
+    local baseScale = GetBaseScale()
+    local zoomScale = mapPanel:GetScale() or 1
+    local idx = 0
+
+    for _, cp in ipairs(allClones) do
+        idx = idx + 1
+        local blip = GetBlip(idx)
+        local sz = BLIP_SIZE / zoomScale
+        if cp.isBoss then sz = BLIP_BOSS_SIZE / zoomScale end
+
+        local key = cp.enemyIdx .. "_" .. cp.cloneIdx
+        local pIdx = cloneKeyToPull[key]
+        if pIdx then
+            -- Part of a pull: full brightness portrait
+            SetupBlip(blip, cp, baseScale, sz, 0, 0, 0, 0)
+            blip:SetFrameLevel(mapPanel:GetFrameLevel() + 3)
+        else
+            -- Not in any pull: grey out
+            SetupBlip(blip, cp, baseScale, sz, 0.3, 0.3, 0.3, 0.6)
+            blip:SetFrameLevel(mapPanel:GetFrameLevel() + 1)
+        end
+        blip.isSurrounding = false
+    end
+
+    activeBlipCount = idx
+end
+
+------------------------------------------------------------------------
+-- Full route pull number labels
+------------------------------------------------------------------------
+UpdateFullRouteLabels = function()
+    HideAllLabels()
+    if not H.pulls or #H.pulls == 0 then return end
+
+    local baseScale = GetBaseScale()
+    local zoomScale = mapPanel:GetScale() or 1
+    local labelIdx = 0
+
+    for pullIdx, pull in ipairs(H.pulls) do
+        if pull.clonePositions and #pull.clonePositions > 0 then
+            local cx, cy, count = 0, 0, 0
+            for _, cp in ipairs(pull.clonePositions) do
+                if cp.sublevel == currentSublevel then
+                    cx = cx + cp.x
+                    cy = cy + cp.y
+                    count = count + 1
+                end
+            end
+
+            if count > 0 then
+                cx = cx / count
+                cy = cy / count
+                labelIdx = labelIdx + 1
+                local lf = GetPullLabel(labelIdx)
+                local isCurrent = (pullIdx == H.currentPullIdx)
+                local isCompleted = pull.completed
+
+                local fontSize
+                if isCurrent then
+                    fontSize = 18 / zoomScale
+                else
+                    fontSize = 12 / zoomScale
+                end
+                fontSize = math.max(fontSize, 6)
+                fontSize = math.min(fontSize, 40)
+                lf.text:SetFont(FONT, fontSize, "OUTLINE")
+
+                -- Gold text, dimmed for completed
+                if isCompleted then
+                    lf.text:SetTextColor(0.5, 0.45, 0.2, 0.6)
+                elseif isCurrent then
+                    lf.text:SetTextColor(1, 0.82, 0, 1)
+                else
+                    lf.text:SetTextColor(1, 0.82, 0, 0.9)
+                end
+
+                lf.text:SetText(tostring(pullIdx))
+                lf:SetSize(math.max(fontSize * 2, 16) / zoomScale, math.max(fontSize * 1.4, 12) / zoomScale)
+                lf:ClearAllPoints()
+                lf:SetPoint("CENTER", tiles4[1], "TOPLEFT", cx * baseScale, cy * baseScale)
+                lf:SetAlpha(1)
+                lf:Show()
+            end
+        end
+    end
+
+    activeLabelCount = labelIdx
+end
+
+------------------------------------------------------------------------
 -- Map control buttons (bottom-right overlay on the map area)
 ------------------------------------------------------------------------
 local BTN_SZ = 22
@@ -860,18 +1177,17 @@ end)
 resetBtn:SetScript("OnLeave", GameTooltip_Hide)
 
 ------------------------------------------------------------------------
--- Resize handle
+-- Resize handle (corner grip — adjusts both width and height)
 ------------------------------------------------------------------------
 local resizeHandle = CreateFrame("Frame", nil, mf)
-resizeHandle:SetHeight(6)
-resizeHandle:SetPoint("BOTTOMLEFT", 0, 0)
+resizeHandle:SetSize(16, 16)
 resizeHandle:SetPoint("BOTTOMRIGHT", 0, 0)
 resizeHandle:EnableMouse(true)
 resizeHandle:SetFrameLevel(mf:GetFrameLevel() + 10)
 
 local resizeIndicator = resizeHandle:CreateTexture(nil, "OVERLAY")
-resizeIndicator:SetSize(30, 2)
-resizeIndicator:SetPoint("CENTER")
+resizeIndicator:SetSize(10, 10)
+resizeIndicator:SetPoint("BOTTOMRIGHT", -2, 2)
 resizeIndicator:SetColorTexture(0.5, 0.5, 0.5, 0.4)
 
 resizeHandle:SetScript("OnEnter", function()
@@ -885,7 +1201,11 @@ local isResizing = false
 resizeHandle:SetScript("OnMouseDown", function(_, btn)
     if btn == "LeftButton" and not H.db.locked then
         isResizing = true
-        mf.resizeStartY = select(2, GetCursorPosition()) / mf:GetEffectiveScale()
+        local es = mf:GetEffectiveScale()
+        local cx, cy = GetCursorPosition()
+        mf.resizeStartX = cx / es
+        mf.resizeStartY = cy / es
+        mf.resizeStartW = mf:GetWidth()
         mf.resizeStartH = mf:GetHeight()
     end
 end)
@@ -899,15 +1219,27 @@ end)
 
 resizeHandle:SetScript("OnUpdate", function()
     if not isResizing then return end
-    local curY = select(2, GetCursorPosition()) / mf:GetEffectiveScale()
-    local delta = mf.resizeStartY - curY
-    local newH = math.max(MIN_SIZE, math.min(mf.resizeStartH + delta, MAX_SIZE))
-    mf:SetHeight(newH)
-    local pull = H.pulls and H.pulls[H.currentPullIdx]
-    if pull then
-        ZoomToPull(pull)
-        UpdateOutlines()
-        UpdateBlips()
+    local es = mf:GetEffectiveScale()
+    local cx, cy = GetCursorPosition()
+    local curX = cx / es
+    local curY = cy / es
+    local deltaX = curX - mf.resizeStartX
+    local deltaY = mf.resizeStartY - curY
+    local newW = math.max(MIN_SIZE, math.min(mf.resizeStartW + deltaX, MAX_SIZE))
+    local newH = math.max(MIN_SIZE, math.min(mf.resizeStartH + deltaY, MAX_SIZE))
+    mf:SetSize(newW, newH)
+    if H.db.mapFullRoute then
+        ZoomToFullRoute()
+        pcall(UpdateAllOutlines)
+        pcall(UpdateFullRouteBlips)
+        pcall(UpdateFullRouteLabels)
+    else
+        local pull = H.pulls and H.pulls[H.currentPullIdx]
+        if pull then
+            ZoomToPull(pull)
+            UpdateOutlines()
+            UpdateBlips()
+        end
     end
 end)
 
@@ -941,11 +1273,15 @@ UpdateMapPopout = function()
     local pull = H.pulls[H.currentPullIdx]
     if not pull then return end
 
-    -- Reset manual zoom/pan when pull changes
-    if lastPullIdx ~= H.currentPullIdx then
+    local isFullRoute = H.db.mapFullRoute
+
+    -- Reset manual zoom/pan when pull changes (only in single-pull mode)
+    if not isFullRoute and lastPullIdx ~= H.currentPullIdx then
         userZoomOffset = 0
         userPanOffsetX = 0
         userPanOffsetY = 0
+        lastPullIdx = H.currentPullIdx
+    elseif isFullRoute then
         lastPullIdx = H.currentPullIdx
     end
 
@@ -955,8 +1291,13 @@ UpdateMapPopout = function()
         LoadMapTextures(H.dungeonIdx, sublevel)
     end
 
-    titleText:SetText("Pull " .. H.currentPullIdx .. " / " .. #H.pulls)
+    if isFullRoute then
+        titleText:SetText("Route - Pull " .. H.currentPullIdx .. " / " .. #H.pulls)
+    else
+        titleText:SetText("Pull " .. H.currentPullIdx .. " / " .. #H.pulls)
+    end
     UpdateSurroundBtnColor()
+    UpdateFullRouteBtnColor()
     UpdateSublevelButtons(H.dungeonIdx)
 
     mf:SetMovable(not H.db.locked)
@@ -968,9 +1309,22 @@ UpdateMapPopout = function()
     end
 
     ApplyMapOpacity(H.db.bgAlpha or 1)
-    ZoomToPull(pull)
-    UpdateOutlines()
-    UpdateBlips()
+
+    if isFullRoute then
+        ZoomToFullRoute()
+        -- pcall each step so one failure doesn't block the rest
+        local ok, err = pcall(UpdateAllOutlines)
+        if not ok then print("|cffff0000MDTHelper map outlines error:|r " .. tostring(err)) end
+        ok, err = pcall(UpdateFullRouteBlips)
+        if not ok then print("|cffff0000MDTHelper map blips error:|r " .. tostring(err)) end
+        ok, err = pcall(UpdateFullRouteLabels)
+        if not ok then print("|cffff0000MDTHelper map labels error:|r " .. tostring(err)) end
+    else
+        HideAllLabels()
+        ZoomToPull(pull)
+        UpdateOutlines()
+        UpdateBlips()
+    end
 end
 
 ------------------------------------------------------------------------
@@ -1000,6 +1354,13 @@ hooksecurefunc(H, "_DoUpdateUI", function()
         mf:Hide()
     end
 end)
+
+------------------------------------------------------------------------
+-- Expose update for external callers (e.g. Settings sliders)
+------------------------------------------------------------------------
+function H:RefreshMapPopout()
+    if UpdateMapPopout then UpdateMapPopout() end
+end
 
 ------------------------------------------------------------------------
 -- Restore saved position and size

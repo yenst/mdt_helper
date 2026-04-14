@@ -159,6 +159,45 @@ MakeSlider("UI Scale", 0.5, 2.0, 0.05, PctFmt,
     end,
     "Scale of the route guide frame")
 
+-- Map Popout: Show Full Route
+MakeCheckbox("Show Full Route on Map",
+    function() return H.db.mapFullRoute end,
+    function(v)
+        H.db.mapFullRoute = v
+        if H.RefreshMapPopout then H:RefreshMapPopout() end
+    end,
+    "Show all pulls on the map instead of just the current one")
+
+-- Map Popout Width
+local function PxFmt(val) return math.floor(val + 0.5) .. "px" end
+
+MakeSlider("Map Width", 150, 800, 10, PxFmt,
+    function()
+        return H.db.mapPopoutSize and H.db.mapPopoutSize[1] or 300
+    end,
+    function(v)
+        if not H.db.mapPopoutSize then H.db.mapPopoutSize = { 300, 300 } end
+        H.db.mapPopoutSize[1] = v
+        local mf = _G["MDTHelperMapPopout"]
+        if mf then mf:SetWidth(v) end
+        if H.RefreshMapPopout then H:RefreshMapPopout() end
+    end,
+    "Width of the map popout window")
+
+-- Map Popout Height
+MakeSlider("Map Height", 150, 800, 10, PxFmt,
+    function()
+        return H.db.mapPopoutSize and H.db.mapPopoutSize[2] or 300
+    end,
+    function(v)
+        if not H.db.mapPopoutSize then H.db.mapPopoutSize = { 300, 300 } end
+        H.db.mapPopoutSize[2] = v
+        local mf = _G["MDTHelperMapPopout"]
+        if mf then mf:SetHeight(v) end
+        if H.RefreshMapPopout then H:RefreshMapPopout() end
+    end,
+    "Height of the map popout window")
+
 -- Spacer before button
 local spacer = optionsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
 spacer:SetPoint("TOPLEFT", lastWidget, "BOTTOMLEFT", -2, -16)

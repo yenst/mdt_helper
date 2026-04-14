@@ -37,6 +37,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.pullThreshold == nil then MDTHelperDB.pullThreshold = 0.9 end
         if MDTHelperDB.mapPopout == nil then MDTHelperDB.mapPopout = false end
         if MDTHelperDB.mapShowSurround == nil then MDTHelperDB.mapShowSurround = true end
+        if MDTHelperDB.mapFullRoute == nil then MDTHelperDB.mapFullRoute = false end
         -- frameHeight: nil means auto-size (default behavior)
         H.db = MDTHelperDB
 
