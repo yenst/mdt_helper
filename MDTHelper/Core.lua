@@ -18,6 +18,8 @@ H.keyCompleted = false
 H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 0.9 }
 H.inCombat = false
 H.combatForcesSnapshot = 0
+H.livePullPercent = 0
+H.livePullValue = 0
 
 ------------------------------------------------------------------------
 -- Event frame
@@ -38,6 +40,9 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.mapPopout == nil then MDTHelperDB.mapPopout = false end
         if MDTHelperDB.mapShowSurround == nil then MDTHelperDB.mapShowSurround = true end
         if MDTHelperDB.mapFullRoute == nil then MDTHelperDB.mapFullRoute = false end
+        if MDTHelperDB.forcesOverlay == nil then MDTHelperDB.forcesOverlay = true end
+        if MDTHelperDB.forcesTooltip == nil then MDTHelperDB.forcesTooltip = true end
+        if MDTHelperDB.efficiencyTracker == nil then MDTHelperDB.efficiencyTracker = true end
         -- frameHeight: nil means auto-size (default behavior)
         H.db = MDTHelperDB
 
@@ -69,7 +74,6 @@ combatFrame:SetScript("OnEvent", function(_, event)
         H.inCombat = true
         H.combatForcesSnapshot = H.totalForcesGained
     elseif event == "PLAYER_REGEN_ENABLED" then
-        -- Leaving combat: check if the current pull is incomplete
         H.inCombat = false
         local pull = H.pulls[H.currentPullIdx]
         if pull and not pull.completed and pull.totalForces > 0 then
@@ -238,6 +242,8 @@ function H:CheckInstance()
         self.currentPullIdx = 1
         self.totalForcesGained = 0
         self.pullForcesAccum = 0
+        self.livePullPercent = 0
+        self.livePullValue = 0
         wipe(self.completedCriteria)
         prevForces = 0
     end

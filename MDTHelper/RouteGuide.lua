@@ -833,7 +833,27 @@ function H:_DoUpdateUI()
     if needed > 0 then
         local pct = math.min(gained / needed, 1)
         barFill:SetWidth(math.max(pct * bw, 1))
-        barText:SetText(gained .. "/" .. needed .. "  " .. math.floor(pct * 100) .. "%")
+        local baseText = gained .. "/" .. needed .. "  " .. math.floor(pct * 100) .. "%"
+
+        -- Efficiency tracking: actual vs planned forces through completed pulls
+        if self.db.efficiencyTracker and cur > 1 then
+            local plannedThrough = 0
+            for i = 1, cur - 1 do
+                if self.pulls[i] and self.pulls[i].completed then
+                    plannedThrough = plannedThrough + self.pulls[i].totalForces
+                end
+            end
+            local plannedPct = (plannedThrough / needed) * 100
+            local actualPct = (gained / needed) * 100
+            local diff = actualPct - plannedPct
+            if diff >= 0.1 then
+                baseText = baseText .. string.format("  |cFF00FF00+%.1f%%|r", diff)
+            elseif diff <= -0.1 then
+                baseText = baseText .. string.format("  |cFFFF4444%.1f%%|r", diff)
+            end
+        end
+
+        barText:SetText(baseText)
     else
         barFill:SetWidth(1)
         barText:SetText("")
@@ -905,6 +925,7 @@ function H:_DoUpdateUI()
         else
             incompleteBorder:Hide()
         end
+
     else
         expandedBlock:Hide()
     end
@@ -1061,5 +1082,37 @@ function H:_DoUpdateUI()
             scrollOffset = 0
             listContent:SetPoint("TOPLEFT", 4, 0)
         end
+    end
+
+    -- Overlay live pull forces during combat
+    if self.UpdatePullForcesDisplay then self:UpdatePullForcesDisplay() end
+end
+
+------------------------------------------------------------------------
+-- Live pull forces display (updated by ForcesOverlay.lua during combat)
+------------------------------------------------------------------------
+function H:UpdatePullForcesDisplay()
+    if not f:IsShown() then return end
+    if not self.livePullPercent or self.livePullPercent <= 0 then return end
+
+    local gained = self.totalForcesGained
+    local needed = self.totalForcesRequired
+    if needed <= 0 then
+        needed = 0
+        for _, pull in ipairs(self.pulls) do needed = needed + pull.totalForces end
+    end
+
+    -- Append live pull % to the forces bar text
+    if needed > 0 then
+        local pct = math.min(gained / needed, 1)
+        local base = gained .. "/" .. needed .. "  " .. math.floor(pct * 100) .. "%"
+        barText:SetText(base .. "  |cFFFFCC00+" .. string.format("%.1f%%", self.livePullPercent) .. "|r")
+    end
+
+    -- Show predicted total on the expanded block
+    if expandedCumPct:IsShown() then
+        local currentPct = needed > 0 and (gained / needed * 100) or 0
+        local predicted = currentPct + self.livePullPercent
+        expandedCumPct:SetText(string.format("|cFFFFCC00\xe2\x86\x92%.1f%%|r", predicted))
     end
 end

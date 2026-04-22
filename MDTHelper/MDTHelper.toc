@@ -1,4 +1,4 @@
-## Interface: 120001
+## Interface: 120005
 ## Title: MDTHelper
 ## Notes: Live route guide for MDT dungeon routes
 ## Author: MDTHelper
@@ -22,5 +22,6 @@
 
 Core.lua
 RouteGuide.lua
+ForcesOverlay.lua
 MapPopout.lua
 Settings.lua

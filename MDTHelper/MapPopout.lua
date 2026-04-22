@@ -377,7 +377,7 @@ local function CreateBlip()
                 local pct = H.totalForcesRequired > 0
                     and string.format("%.1f%%", self.mobForces / H.totalForcesRequired * 100)
                     or "?"
-                txt = txt .. "\n|cffffffff" .. self.mobForces .. " forces (" .. pct .. ")|r"
+                txt = txt .. "\n|cffffffff" .. pct .. "|r"
             end
             if self.mobIsBoss then txt = txt .. "\n|cffffff00Boss|r" end
             if self.isSurrounding then txt = txt .. "\n|cffff4444Skip|r" end

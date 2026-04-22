@@ -20,7 +20,7 @@ version:SetText("Live route guide for MDT dungeon routes")
 -- Helpers
 ------------------------------------------------------------------------
 local lastWidget = version
-local SPACING = -20
+local SPACING = -2
 
 local function MakeCheckbox(label, getFunc, setFunc, tooltip)
     local cb = CreateFrame("CheckButton", nil, optionsFrame, "UICheckButtonTemplate")
@@ -46,12 +46,35 @@ local function MakeCheckbox(label, getFunc, setFunc, tooltip)
     return cb
 end
 
-local function MakeSlider(label, min, max, step, fmtFunc, getFunc, setFunc, tooltip)
-    -- Label
-    local lbl = optionsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-    lbl:SetPoint("TOPLEFT", lastWidget, "BOTTOMLEFT", lastWidget == version and 0 or 2, SPACING - 4)
+-- Two checkboxes on one row (left + right columns)
+local function MakeCheckboxPair(lbl1, get1, set1, tip1, lbl2, get2, set2, tip2)
+    local cb1 = MakeCheckbox(lbl1, get1, set1, tip1)
 
-    -- Slider
+    local cb2 = CreateFrame("CheckButton", nil, optionsFrame, "UICheckButtonTemplate")
+    cb2:SetPoint("LEFT", cb1, "LEFT", 190, 0)
+    cb2:SetScript("OnShow", function(self) self:SetChecked(get2()) end)
+    cb2:SetScript("OnClick", function(self) set2(self:GetChecked()) end)
+
+    local text2 = cb2:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    text2:SetPoint("LEFT", cb2, "RIGHT", 4, 1)
+    text2:SetText(lbl2)
+
+    if tip2 then
+        cb2:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(lbl2, 1, 1, 1)
+            GameTooltip:AddLine(tip2, nil, nil, nil, true)
+            GameTooltip:Show()
+        end)
+        cb2:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+    return cb1, cb2
+end
+
+local function MakeSlider(label, min, max, step, fmtFunc, getFunc, setFunc, tooltip)
+    local lbl = optionsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    lbl:SetPoint("TOPLEFT", lastWidget, "BOTTOMLEFT", lastWidget == version and 0 or 2, -6)
+
     local slider = CreateFrame("Slider", nil, optionsFrame, "OptionsSliderTemplate")
     slider:SetSize(260, 17)
     slider:SetPoint("TOPLEFT", lbl, "BOTTOMLEFT", 0, -4)
@@ -96,31 +119,54 @@ local function PctFmt(val)
 end
 
 ------------------------------------------------------------------------
--- Controls
+-- Controls (checkboxes in two columns to save space)
 ------------------------------------------------------------------------
 
--- Auto-Import
-MakeCheckbox("Auto-Import Leader Route",
+MakeCheckboxPair(
+    "Auto-Import Route",
     function() return H.db.autoImport end,
     function(v) H.db.autoImport = v end,
-    "Automatically import the party leader's MDT route when entering a dungeon")
-
--- Auto-Advance
-MakeCheckbox("Auto-Advance Pulls",
+    "Automatically import the party leader's MDT route when entering a dungeon",
+    "Auto-Advance Pulls",
     function() return H.db.autoAdvance end,
     function(v) H.db.autoAdvance = v end,
     "Automatically advance to the next pull based on enemy forces gained")
 
--- Lock Frame
-MakeCheckbox("Lock Frame",
+MakeCheckboxPair(
+    "Lock Frame",
     function() return H.db.locked end,
     function(v)
         H.db.locked = v
         if H.UpdateUI then H:UpdateUI() end
     end,
-    "Prevent moving and resizing the route guide frame")
+    "Prevent moving and resizing the route guide frame",
+    "Full Route on Map",
+    function() return H.db.mapFullRoute end,
+    function(v)
+        H.db.mapFullRoute = v
+        if H.RefreshMapPopout then H:RefreshMapPopout() end
+    end,
+    "Show all pulls on the map instead of just the current one")
 
--- Opacity
+MakeCheckboxPair(
+    "Forces on Nameplates",
+    function() return H.db.forcesOverlay end,
+    function(v) H.db.forcesOverlay = v end,
+    "Show forces percentage on enemy nameplates in M+ dungeons",
+    "Forces in Tooltip",
+    function() return H.db.forcesTooltip end,
+    function(v) H.db.forcesTooltip = v end,
+    "Show forces percentage in enemy tooltips in M+ dungeons")
+
+MakeCheckbox("Efficiency Tracker",
+    function() return H.db.efficiencyTracker end,
+    function(v) H.db.efficiencyTracker = v end,
+    "Show ahead/behind indicator comparing actual vs planned forces")
+
+------------------------------------------------------------------------
+-- Sliders
+------------------------------------------------------------------------
+
 MakeSlider("Opacity", 0.1, 1.0, 0.05, PctFmt,
     function() return H.db.bgAlpha or 1 end,
     function(v)
@@ -129,13 +175,11 @@ MakeSlider("Opacity", 0.1, 1.0, 0.05, PctFmt,
     end,
     "Background transparency of the route guide")
 
--- Pull Accuracy
 MakeSlider("Pull Accuracy", 0.5, 1.0, 0.05, PctFmt,
     function() return H.db.pullThreshold or 0.9 end,
     function(v) H.db.pullThreshold = v end,
     "How much of a pull's forces must be killed before auto-advancing")
 
--- UI Scale
 MakeSlider("UI Scale", 0.5, 2.0, 0.05, PctFmt,
     function() return H.db.uiScale or 1 end,
     function(v)
@@ -159,16 +203,6 @@ MakeSlider("UI Scale", 0.5, 2.0, 0.05, PctFmt,
     end,
     "Scale of the route guide frame")
 
--- Map Popout: Show Full Route
-MakeCheckbox("Show Full Route on Map",
-    function() return H.db.mapFullRoute end,
-    function(v)
-        H.db.mapFullRoute = v
-        if H.RefreshMapPopout then H:RefreshMapPopout() end
-    end,
-    "Show all pulls on the map instead of just the current one")
-
--- Map Popout Width
 local function PxFmt(val) return math.floor(val + 0.5) .. "px" end
 
 MakeSlider("Map Width", 150, 800, 10, PxFmt,
@@ -184,7 +218,6 @@ MakeSlider("Map Width", 150, 800, 10, PxFmt,
     end,
     "Width of the map popout window")
 
--- Map Popout Height
 MakeSlider("Map Height", 150, 800, 10, PxFmt,
     function()
         return H.db.mapPopoutSize and H.db.mapPopoutSize[2] or 300
@@ -198,16 +231,12 @@ MakeSlider("Map Height", 150, 800, 10, PxFmt,
     end,
     "Height of the map popout window")
 
--- Spacer before button
-local spacer = optionsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-spacer:SetPoint("TOPLEFT", lastWidget, "BOTTOMLEFT", -2, -16)
-spacer:SetText("")
-lastWidget = spacer
-
--- Reset Position & Size button
+------------------------------------------------------------------------
+-- Reset button
+------------------------------------------------------------------------
 local resetBtn = CreateFrame("Button", nil, optionsFrame, "UIPanelButtonTemplate")
 resetBtn:SetSize(180, 24)
-resetBtn:SetPoint("TOPLEFT", lastWidget, "BOTTOMLEFT", 0, -4)
+resetBtn:SetPoint("TOPLEFT", lastWidget, "BOTTOMLEFT", -2, -10)
 resetBtn:SetText("Reset Position & Size")
 resetBtn:SetScript("OnClick", function()
     H.db.framePoint = nil
