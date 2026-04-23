@@ -114,6 +114,63 @@ local function MakeSlider(label, min, max, step, fmtFunc, getFunc, setFunc, tool
     return slider, lbl
 end
 
+local function MakeDropdown(label, choices, getFunc, setFunc, tooltip)
+    local container = CreateFrame("Frame", nil, optionsFrame)
+    container:SetSize(200, 28)
+    container:SetPoint("TOPLEFT", lastWidget, "BOTTOMLEFT", lastWidget == version and 0 or 2, -6)
+
+    local lbl = container:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    lbl:SetPoint("LEFT", 0, 0)
+    lbl:SetText(label .. ":")
+
+    local btn = CreateFrame("Button", nil, container, "BackdropTemplate")
+    btn:SetSize(90, 20)
+    btn:SetPoint("LEFT", lbl, "RIGHT", 6, 0)
+    btn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    btn:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
+    btn:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
+
+    local btnText = btn:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    btnText:SetPoint("CENTER")
+
+    local function UpdateText()
+        local cur = getFunc()
+        for _, c in ipairs(choices) do
+            if c.value == cur then btnText:SetText(c.label); return end
+        end
+        btnText:SetText(cur or "?")
+    end
+
+    btn:SetScript("OnClick", function(self)
+        local cur = getFunc()
+        for i, c in ipairs(choices) do
+            if c.value == cur then
+                local next = choices[(i % #choices) + 1]
+                setFunc(next.value)
+                UpdateText()
+                return
+            end
+        end
+        setFunc(choices[1].value)
+        UpdateText()
+    end)
+
+    btn:SetScript("OnShow", function() UpdateText() end)
+
+    if tooltip then
+        btn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(label, 1, 1, 1)
+            GameTooltip:AddLine(tooltip, nil, nil, nil, true)
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+
+    lastWidget = container
+    return container
+end
+
 local function PctFmt(val)
     return math.floor(val * 100 + 0.5) .. "%"
 end
@@ -157,6 +214,15 @@ MakeCheckboxPair(
     function() return H.db.forcesTooltip end,
     function(v) H.db.forcesTooltip = v end,
     "Show forces percentage in enemy tooltips in M+ dungeons")
+
+MakeDropdown("Forces Position", {
+    { label = "Top",    value = "TOP" },
+    { label = "Bottom", value = "BOTTOM" },
+    { label = "Left",   value = "LEFT" },
+    { label = "Right",  value = "RIGHT" },
+}, function() return H.db.forcesPosition or "RIGHT" end,
+   function(v) H.db.forcesPosition = v end,
+   "Where to show the forces % on nameplates (click to cycle)")
 
 MakeCheckbox("Efficiency Tracker",
     function() return H.db.efficiencyTracker end,

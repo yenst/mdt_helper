@@ -41,6 +41,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.mapShowSurround == nil then MDTHelperDB.mapShowSurround = true end
         if MDTHelperDB.mapFullRoute == nil then MDTHelperDB.mapFullRoute = false end
         if MDTHelperDB.forcesOverlay == nil then MDTHelperDB.forcesOverlay = true end
+        if MDTHelperDB.forcesPosition == nil then MDTHelperDB.forcesPosition = "RIGHT" end
         if MDTHelperDB.forcesTooltip == nil then MDTHelperDB.forcesTooltip = true end
         if MDTHelperDB.efficiencyTracker == nil then MDTHelperDB.efficiencyTracker = true end
         -- frameHeight: nil means auto-size (default behavior)

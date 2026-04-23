@@ -76,7 +76,16 @@ local function ShowOverlay(nameplate, unitToken)
     fs:ClearAllPoints()
     local uf = nameplate.unitFrame or nameplate.UnitFrame
     local anchor = (uf and uf.healthBar) or nameplate
-    fs:SetPoint("BOTTOM", anchor, "TOP", 0, 2)
+    local pos = H.db and H.db.forcesPosition or "RIGHT"
+    if pos == "BOTTOM" then
+        fs:SetPoint("TOP", anchor, "BOTTOM", 0, -2)
+    elseif pos == "LEFT" then
+        fs:SetPoint("RIGHT", anchor, "LEFT", -2, 0)
+    elseif pos == "RIGHT" then
+        fs:SetPoint("LEFT", anchor, "RIGHT", 2, 0)
+    else -- "TOP" (default)
+        fs:SetPoint("BOTTOM", anchor, "TOP", 0, 2)
+    end
 
     -- SetFormattedText handles secret values internally
     local ok = pcall(fs.SetFormattedText, fs, "%.1f%%", rawPct)
