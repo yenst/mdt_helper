@@ -37,7 +37,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.autoImport == nil then MDTHelperDB.autoImport = true end
         if MDTHelperDB.autoAdvance == nil then MDTHelperDB.autoAdvance = true end
         if MDTHelperDB.pullThreshold == nil then MDTHelperDB.pullThreshold = 0.9 end
-        if MDTHelperDB.mapPopout == nil then MDTHelperDB.mapPopout = false end
+        if MDTHelperDB.mapPopout == nil then MDTHelperDB.mapPopout = true end
         if MDTHelperDB.mapShowSurround == nil then MDTHelperDB.mapShowSurround = true end
         if MDTHelperDB.mapFullRoute == nil then MDTHelperDB.mapFullRoute = false end
         if MDTHelperDB.forcesOverlay == nil then MDTHelperDB.forcesOverlay = true end
@@ -232,21 +232,31 @@ function H:CheckInstance()
     local _, instanceType = GetInstanceInfo()
     if instanceType == "party" then
         self.activeDungeon = true
+        self.db.mapPopout = true
         self:SyncMDTDungeon()
         self:BuildRoute()
     else
         self.activeDungeon = false
         self.db.dungeonOverride = nil
         self.keyCompleted = false
-        wipe(self.pulls)
         wipe(self.npcKills)
-        self.currentPullIdx = 1
         self.totalForcesGained = 0
         self.pullForcesAccum = 0
         self.livePullPercent = 0
         self.livePullValue = 0
         wipe(self.completedCriteria)
         prevForces = 0
+        if self.db.mapPopout and self.pulls and #self.pulls > 0 then
+            -- Preserve route for standalone map, reset completion state
+            self.currentPullIdx = 1
+            for _, pull in ipairs(self.pulls) do
+                pull.completed = false
+                pull.incomplete = nil
+            end
+        else
+            wipe(self.pulls)
+            self.currentPullIdx = 1
+        end
     end
     if self.UpdateUI then self:UpdateUI() end
 end
@@ -615,7 +625,7 @@ function H:HookMDTComm()
     -- Hook MDT preset changes so any import/switch rebuilds our route
     if MDT and MDT.UpdatePresetDropDown then
         hooksecurefunc(MDT, "UpdatePresetDropDown", function()
-            if H.activeDungeon then
+            if H.activeDungeon or H.db.mapPopout then
                 H:BuildRoute()
             end
         end)

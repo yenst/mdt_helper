@@ -61,9 +61,55 @@ titleBg:SetColorTexture(0.08, 0.08, 0.08, 1)
 
 local titleText = titleBar:CreateFontString(nil, "OVERLAY")
 titleText:SetFont(FONT, 10, "OUTLINE")
-titleText:SetPoint("LEFT", 8, 0)
 titleText:SetTextColor(0, 0.8, 1)
 titleText:SetText("Map")
+
+-- Nav buttons (prev/next pull)
+local prevPullBtn = CreateFrame("Button", nil, titleBar)
+prevPullBtn:SetSize(16, TITLE_H)
+prevPullBtn:SetPoint("LEFT", 2, 0)
+prevPullBtn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
+prevPullBtn:GetHighlightTexture():SetAlpha(0.3)
+local prevPullTxt = prevPullBtn:CreateFontString(nil, "OVERLAY")
+prevPullTxt:SetFont(FONT, 12, "OUTLINE")
+prevPullTxt:SetPoint("CENTER")
+prevPullTxt:SetText("<")
+prevPullTxt:SetTextColor(0.7, 0.7, 0.7)
+prevPullBtn:SetScript("OnClick", function() H:RetreatPull() end)
+prevPullBtn:SetScript("OnEnter", function(self)
+    prevPullTxt:SetTextColor(0, 0.8, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:SetText("Previous pull", 1, 1, 1)
+    GameTooltip:Show()
+end)
+prevPullBtn:SetScript("OnLeave", function()
+    prevPullTxt:SetTextColor(0.7, 0.7, 0.7)
+    GameTooltip:Hide()
+end)
+
+titleText:SetPoint("LEFT", prevPullBtn, "RIGHT", 0, 0)
+
+local nextPullBtn = CreateFrame("Button", nil, titleBar)
+nextPullBtn:SetSize(16, TITLE_H)
+nextPullBtn:SetPoint("LEFT", titleText, "RIGHT", 0, 0)
+nextPullBtn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
+nextPullBtn:GetHighlightTexture():SetAlpha(0.3)
+local nextPullTxt = nextPullBtn:CreateFontString(nil, "OVERLAY")
+nextPullTxt:SetFont(FONT, 12, "OUTLINE")
+nextPullTxt:SetPoint("CENTER")
+nextPullTxt:SetText(">")
+nextPullTxt:SetTextColor(0.7, 0.7, 0.7)
+nextPullBtn:SetScript("OnClick", function() H:AdvancePull() end)
+nextPullBtn:SetScript("OnEnter", function(self)
+    nextPullTxt:SetTextColor(0, 0.8, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+    GameTooltip:SetText("Next pull", 1, 1, 1)
+    GameTooltip:Show()
+end)
+nextPullBtn:SetScript("OnLeave", function()
+    nextPullTxt:SetTextColor(0.7, 0.7, 0.7)
+    GameTooltip:Hide()
+end)
 
 local closeBtn = CreateFrame("Button", nil, titleBar, "UIPanelCloseButtonNoScripts")
 closeBtn:SetSize(18, 18)
@@ -88,14 +134,27 @@ surroundBtn:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square")
 surroundBtn:GetHighlightTexture():SetAlpha(0.3)
 
 local function UpdateSurroundBtnColor()
-    local on = H.db.mapShowSurround ~= false
-    surroundIcon:SetAtlas(on and "Waypoint-MapPin-Untracked" or "Waypoint-MapPin-Tracked", false)
+    if H.db.mapFullRoute then
+        surroundIcon:SetAtlas("Waypoint-MapPin-Tracked", false)
+        surroundIcon:SetDesaturated(true)
+        surroundIcon:SetAlpha(0.3)
+    else
+        local on = H.db.mapShowSurround ~= false
+        surroundIcon:SetAtlas(on and "Waypoint-MapPin-Untracked" or "Waypoint-MapPin-Tracked", false)
+        surroundIcon:SetDesaturated(false)
+        surroundIcon:SetAlpha(1)
+    end
 end
 
 surroundBtn:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    local on = H.db.mapShowSurround ~= false
-    GameTooltip:SetText("Surrounding mobs: " .. (on and "shown" or "hidden"), 1, 1, 1)
+    if H.db.mapFullRoute then
+        GameTooltip:SetText("Surrounding mobs", 0.5, 0.5, 0.5)
+        GameTooltip:AddLine("Not available in full route view", 0.5, 0.5, 0.5)
+    else
+        local on = H.db.mapShowSurround ~= false
+        GameTooltip:SetText("Surrounding mobs: " .. (on and "shown" or "hidden"), 1, 1, 1)
+    end
     GameTooltip:Show()
 end)
 surroundBtn:SetScript("OnLeave", function()
@@ -103,6 +162,7 @@ surroundBtn:SetScript("OnLeave", function()
     GameTooltip:Hide()
 end)
 surroundBtn:SetScript("OnMouseDown", function()
+    if H.db.mapFullRoute then return end
     H.db.mapShowSurround = not (H.db.mapShowSurround ~= false)
     UpdateSurroundBtnColor()
     if UpdateMapPopout then UpdateMapPopout() end
@@ -780,10 +840,11 @@ local function ZoomToPull(pull)
     if diffX < 1 then diffX = 1 end
     if diffY < 1 then diffY = 1 end
 
-    local zoomScale = math.min(sw / (diffX * baseScale), sh / (diffY * baseScale))
-    zoomScale = zoomScale + userZoomOffset
+    local baseZoom = math.min(sw / (diffX * baseScale), sh / (diffY * baseScale))
+    local zoomScale = baseZoom + userZoomOffset
     if zoomScale < 1 then zoomScale = 1 end
     if zoomScale > 10 then zoomScale = 10 end
+    userZoomOffset = zoomScale - baseZoom
 
     mapPanel:SetScale(zoomScale)
 
@@ -856,10 +917,11 @@ local function ZoomToFullRoute()
     if diffX < 1 then diffX = 1 end
     if diffY < 1 then diffY = 1 end
 
-    local zoomScale = math.min(sw / (diffX * baseScale), sh / (diffY * baseScale))
-    zoomScale = zoomScale + userZoomOffset
+    local baseZoom = math.min(sw / (diffX * baseScale), sh / (diffY * baseScale))
+    local zoomScale = baseZoom + userZoomOffset
     if zoomScale < 0.5 then zoomScale = 0.5 end
     if zoomScale > 10 then zoomScale = 10 end
+    userZoomOffset = zoomScale - baseZoom
 
     mapPanel:SetScale(zoomScale)
 
@@ -1336,6 +1398,15 @@ function H:ToggleMapPopout()
         self.db.mapPopout = false
         print("|cff00ccffMDTHelper|r: Map popout hidden")
     else
+        -- Build route from MDT if no pulls loaded (works outside dungeons)
+        if not self.pulls or #self.pulls == 0 then
+            self:SyncMDTDungeon()
+            self:BuildRoute()
+        end
+        if not self.pulls or #self.pulls == 0 then
+            print("|cff00ccffMDTHelper|r: No route loaded in MDT")
+            return
+        end
         self.db.mapPopout = true
         mf:Show()
         UpdateMapPopout()
@@ -1347,10 +1418,10 @@ end
 -- Hook into UI update cycle
 ------------------------------------------------------------------------
 hooksecurefunc(H, "_DoUpdateUI", function()
-    if H.db.mapPopout and H.activeDungeon and H.pulls and #H.pulls > 0 then
+    if H.db.mapPopout and H.pulls and #H.pulls > 0 then
         if not mf:IsShown() then mf:Show() end
         UpdateMapPopout()
-    elseif mf:IsShown() and (not H.activeDungeon or not H.pulls or #H.pulls == 0) then
+    elseif mf:IsShown() and (not H.db.mapPopout or not H.pulls or #H.pulls == 0) then
         mf:Hide()
     end
 end)
