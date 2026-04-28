@@ -766,10 +766,15 @@ end
 -- Update UI
 ------------------------------------------------------------------------
 function H:UpdateUI()
-    local uiOk, uiErr = pcall(function() H:_DoUpdateUI() end)
-    if not uiOk then
-        print("|cffff0000MDTHelper UI error:|r " .. tostring(uiErr))
-    end
+    if self._updatePending then return end
+    self._updatePending = true
+    C_Timer.After(0, function()
+        self._updatePending = false
+        local uiOk, uiErr = pcall(function() H:_DoUpdateUI() end)
+        if not uiOk then
+            print("|cffff0000MDTHelper UI error:|r " .. tostring(uiErr))
+        end
+    end)
 end
 
 function H:_DoUpdateUI()
