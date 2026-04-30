@@ -237,6 +237,7 @@ function H:CheckInstance()
         self:BuildRoute()
     else
         self.activeDungeon = false
+        self.db.mapPopout = false
         self.db.dungeonOverride = nil
         self.keyCompleted = false
         wipe(self.npcKills)
@@ -246,17 +247,8 @@ function H:CheckInstance()
         self.livePullValue = 0
         wipe(self.completedCriteria)
         prevForces = 0
-        if self.db.mapPopout and self.pulls and #self.pulls > 0 then
-            -- Preserve route for standalone map, reset completion state
-            self.currentPullIdx = 1
-            for _, pull in ipairs(self.pulls) do
-                pull.completed = false
-                pull.incomplete = nil
-            end
-        else
-            wipe(self.pulls)
-            self.currentPullIdx = 1
-        end
+        wipe(self.pulls)
+        self.currentPullIdx = 1
     end
     if self.UpdateUI then self:UpdateUI() end
 end
