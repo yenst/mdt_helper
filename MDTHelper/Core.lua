@@ -6,6 +6,14 @@ BINDING_NAME_MDTHELPER_NEXT_PULL = "Next Pull"
 BINDING_NAME_MDTHELPER_PREV_PULL = "Previous Pull"
 
 local H = NS
+
+-- Localize enemy name via MDT's translation table
+local function LocalName(name)
+    if not name then return "Unknown" end
+    local L = MDT and MDT.L
+    return L and L[name] or name
+end
+
 H.pulls = {}
 H.npcIdToEnemyInfo = {}
 H.npcKills = {}
@@ -284,7 +292,7 @@ function H:BuildRoute()
     for _, enemyData in pairs(enemies) do
         if enemyData.id then
             self.npcIdToEnemyInfo[enemyData.id] = {
-                name = enemyData.name or "Unknown",
+                name = LocalName(enemyData.name),
                 forces = enemyData.count or 0,
             }
         end
@@ -303,7 +311,7 @@ function H:BuildRoute()
                         y = cloneData.y,
                         sublevel = sl,
                         npcId = enemyData.id,
-                        name = enemyData.name or "Unknown",
+                        name = LocalName(enemyData.name),
                         forces = enemyData.count or 0,
                         isBoss = enemyData.isBoss or false,
                         displayId = enemyData.displayId,
@@ -333,7 +341,7 @@ function H:BuildRoute()
                     if not npcCounts[npcId] then
                         npcCounts[npcId] = {
                             npcId = npcId,
-                            name = enemyData.name or "Unknown",
+                            name = LocalName(enemyData.name),
                             forces = enemyData.count or 0,
                             numClones = 0,
                             isBoss = enemyData.isBoss or false,
@@ -349,7 +357,7 @@ function H:BuildRoute()
                                 y = cloneData.y,
                                 sublevel = cloneData.sublevel or 1,
                                 npcId = npcId,
-                                name = enemyData.name or "Unknown",
+                                name = LocalName(enemyData.name),
                                 forces = enemyData.count or 0,
                                 isBoss = enemyData.isBoss or false,
                                 displayId = enemyData.displayId,
