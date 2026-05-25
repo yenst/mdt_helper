@@ -61,7 +61,7 @@ local function GetOrCreateOverlay(nameplate)
         if fs then fs:Hide() end
         fs = parent:CreateFontString(nil, "OVERLAY")
         fs:SetDrawLayer("OVERLAY", 7)
-        fs:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+        fs:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
         fs:SetTextColor(0.2, 1.0, 0.6, 1.0)
         overlays[nameplate] = fs
     end

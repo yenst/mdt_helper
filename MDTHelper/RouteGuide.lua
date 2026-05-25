@@ -4,7 +4,7 @@ local H = MDTHelper
 -- Config
 ------------------------------------------------------------------------
 local WIDTH = 240
-local FONT = "Fonts\\FRIZQT__.TTF"
+local FONT = STANDARD_TEXT_FONT
 local ROW_H = 26
 local MOB_ROW_H = 28
 local EXPANDED_TITLE_H = 4
