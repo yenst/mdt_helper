@@ -447,6 +447,26 @@ local function CreateBlip()
     end)
     bf:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- Click-to-edit: add/remove this mob from the current pull. Track the cursor
+    -- on mouse-down so a press that turns into a drag doesn't toggle the pull.
+    bf:SetScript("OnMouseDown", function(self)
+        self._downX, self._downY = GetCursorPosition()
+    end)
+    bf:SetScript("OnMouseUp", function(self, button)
+        if not H.db.mapEditPulls then return end
+        if not self.enemyIdx or not self.cloneIdx then return end
+        if self._downX then
+            local x, y = GetCursorPosition()
+            local dx, dy = x - self._downX, y - self._downY
+            if (dx * dx + dy * dy) > 100 then return end -- moved >10px → treat as drag
+        end
+        if button == "LeftButton" then
+            H:TogglePullMob(self.enemyIdx, self.cloneIdx, true)
+        elseif button == "RightButton" then
+            H:TogglePullMob(self.enemyIdx, self.cloneIdx, false)
+        end
+    end)
+
     bf:Hide()
     return bf
 end
@@ -969,6 +989,11 @@ local function SetupBlip(blip, cp, baseScale, sz, overlayR, overlayG, overlayB, 
     blip.mobForces = cp.forces
     blip.mobIsBoss = cp.isBoss
 
+    -- Identity for click-to-edit (which dungeon enemy/clone this blip represents)
+    blip.enemyIdx = cp.enemyIdx
+    blip.cloneIdx = cp.cloneIdx
+    blip.sublevel = cp.sublevel
+
     blip:ClearAllPoints()
     blip:SetPoint("CENTER", tiles4[1], "TOPLEFT", cp.x * baseScale, cp.y * baseScale)
     blip:Show()
@@ -1325,7 +1350,7 @@ end)
 ------------------------------------------------------------------------
 -- Main update
 ------------------------------------------------------------------------
-UpdateMapPopout = function()
+UpdateMapPopout = function(skipZoom)
     if not mf:IsShown() then return end
     if not H.dungeonIdx or not H.pulls or #H.pulls == 0 then
         mf:Hide()
@@ -1373,7 +1398,9 @@ UpdateMapPopout = function()
     ApplyMapOpacity(H.db.bgAlpha or 1)
 
     if isFullRoute then
-        ZoomToFullRoute()
+        -- skipZoom: re-render in place (e.g. after editing a pull) so the
+        -- camera doesn't jump when the pull's bounding box changes.
+        if not skipZoom then ZoomToFullRoute() end
         -- pcall each step so one failure doesn't block the rest
         local ok, err = pcall(UpdateAllOutlines)
         if not ok then print("|cffff0000MDTHelper map outlines error:|r " .. tostring(err)) end
@@ -1383,7 +1410,7 @@ UpdateMapPopout = function()
         if not ok then print("|cffff0000MDTHelper map labels error:|r " .. tostring(err)) end
     else
         HideAllLabels()
-        ZoomToPull(pull)
+        if not skipZoom then ZoomToPull(pull) end
         UpdateOutlines()
         UpdateBlips()
     end
@@ -1418,9 +1445,13 @@ end
 -- Hook into UI update cycle
 ------------------------------------------------------------------------
 hooksecurefunc(H, "_DoUpdateUI", function()
+    -- _editingPull is set while the user is adding/removing mobs on the map so
+    -- this deferred refresh re-renders in place instead of re-centering the camera.
+    local skipZoom = H._editingPull
+    H._editingPull = nil
     if H.db.mapPopout and H.pulls and #H.pulls > 0 then
         if not mf:IsShown() then mf:Show() end
-        UpdateMapPopout()
+        UpdateMapPopout(skipZoom)
     elseif mf:IsShown() and (not H.db.mapPopout or not H.pulls or #H.pulls == 0) then
         mf:Hide()
     end
@@ -1429,8 +1460,8 @@ end)
 ------------------------------------------------------------------------
 -- Expose update for external callers (e.g. Settings sliders)
 ------------------------------------------------------------------------
-function H:RefreshMapPopout()
-    if UpdateMapPopout then UpdateMapPopout() end
+function H:RefreshMapPopout(skipZoom)
+    if UpdateMapPopout then UpdateMapPopout(skipZoom) end
 end
 
 ------------------------------------------------------------------------

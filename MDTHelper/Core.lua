@@ -23,7 +23,7 @@ H.totalForcesRequired = 0
 H.activeDungeon = false
 H.completedCriteria = {}
 H.keyCompleted = false
-H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 0.9 }
+H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 0.9, mapEditPulls = true }
 H.inCombat = false
 H.combatForcesSnapshot = 0
 H.livePullPercent = 0
@@ -48,6 +48,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.mapPopout == nil then MDTHelperDB.mapPopout = true end
         if MDTHelperDB.mapShowSurround == nil then MDTHelperDB.mapShowSurround = true end
         if MDTHelperDB.mapFullRoute == nil then MDTHelperDB.mapFullRoute = false end
+        if MDTHelperDB.mapEditPulls == nil then MDTHelperDB.mapEditPulls = true end
         if MDTHelperDB.forcesOverlay == nil then MDTHelperDB.forcesOverlay = true end
         if MDTHelperDB.forcesPosition == nil then MDTHelperDB.forcesPosition = "RIGHT" end
         if MDTHelperDB.forcesTooltip == nil then MDTHelperDB.forcesTooltip = true end
@@ -265,11 +266,20 @@ end
 -- Build route from MDT
 ------------------------------------------------------------------------
 function H:BuildRoute()
-    wipe(self.pulls)
-    wipe(self.npcIdToEnemyInfo)
+    -- Full (re)build: resets live-run progress, then rebuilds the pull composition.
     wipe(self.npcKills)
     self.currentPullIdx = 1
     self.totalForcesGained = 0
+    self.pullForcesAccum = 0
+    self:RebuildPullData()
+end
+
+-- Rebuilds the pull/enemy composition from MDT's current preset WITHOUT resetting
+-- live-run state (currentPullIdx, kills, forces gained). Safe to call mid-run, e.g.
+-- after the user edits the current pull on the map popout.
+function H:RebuildPullData()
+    wipe(self.pulls)
+    wipe(self.npcIdToEnemyInfo)
     self.totalForcesRequired = 0
 
     if not MDT or not MDT.GetCurrentPreset then return end
@@ -384,6 +394,134 @@ function H:BuildRoute()
     end
 
     if self.UpdateUI then self:UpdateUI() end
+end
+
+------------------------------------------------------------------------
+-- Live pull editing (click mobs on the map popout to add/remove them)
+------------------------------------------------------------------------
+
+-- Returns the list of clones that should be toggled together with the clicked
+-- one. Mobs that pull together via social aggro share a numeric "g" group on
+-- their clone data (scoped per sublevel), so we include every clone matching
+-- that group — mirroring MDT's own linked-mob handling.
+function H:GetLinkedClones(enemyIdx, cloneIdx)
+    local result = { { enemyIdx = enemyIdx, cloneIdx = cloneIdx } }
+    if not MDT or not self.dungeonIdx then return result end
+    local enemies = MDT.dungeonEnemies[self.dungeonIdx]
+    if not enemies then return result end
+
+    local srcEnemy = enemies[enemyIdx]
+    local srcClone = srcEnemy and srcEnemy.clones and srcEnemy.clones[cloneIdx]
+    if not srcClone or not srcClone.g then return result end
+
+    local g = srcClone.g
+    local sublevel = srcClone.sublevel or 1
+    for eIdx, enemyData in pairs(enemies) do
+        if enemyData.clones then
+            for cIdx, cloneData in pairs(enemyData.clones) do
+                if not (eIdx == enemyIdx and cIdx == cloneIdx)
+                    and cloneData.g == g
+                    and (cloneData.sublevel or 1) == sublevel then
+                    result[#result + 1] = { enemyIdx = eIdx, cloneIdx = cIdx }
+                end
+            end
+        end
+    end
+    return result
+end
+
+-- Remove a specific clone from one pull. Returns true if anything changed.
+local function removeCloneFromPull(pull, enemyIdx, cloneIdx)
+    local changed = false
+    local list = pull[enemyIdx]
+    if type(list) == "table" then
+        for k = #list, 1, -1 do
+            if list[k] == cloneIdx then
+                table.remove(list, k)
+                changed = true
+            end
+        end
+    end
+    return changed
+end
+
+-- Add or remove a single clone in the target pull. A clone may only belong to
+-- one pull, so adding strips it from every other pull first (matching MDT).
+local function setCloneInPull(pulls, pullIdx, enemyIdx, cloneIdx, add)
+    local changed = false
+    if add then
+        for pIdx, pull in ipairs(pulls) do
+            if pIdx ~= pullIdx and removeCloneFromPull(pull, enemyIdx, cloneIdx) then
+                changed = true
+            end
+        end
+        local target = pulls[pullIdx]
+        target[enemyIdx] = target[enemyIdx] or {}
+        local found = false
+        for _, v in ipairs(target[enemyIdx]) do
+            if v == cloneIdx then found = true; break end
+        end
+        if not found then
+            table.insert(target[enemyIdx], cloneIdx)
+            changed = true
+        end
+    else
+        changed = removeCloneFromPull(pulls[pullIdx], enemyIdx, cloneIdx)
+    end
+    return changed
+end
+
+-- Add (add=true) or remove (add=false) a mob — plus any social-aggro linked
+-- mobs — from the current pull, writing through to MDT's preset and refreshing.
+function H:TogglePullMob(enemyIdx, cloneIdx, add)
+    if not enemyIdx or not cloneIdx then return end
+    if not MDT or not MDT.GetCurrentPreset then return end
+    local preset = MDT:GetCurrentPreset()
+    if not preset or not preset.value or not preset.value.pulls then return end
+
+    local pulls = preset.value.pulls
+    local pullIdx = self.currentPullIdx or 1
+    if not pulls[pullIdx] then return end
+
+    local changed = false
+    for _, c in ipairs(self:GetLinkedClones(enemyIdx, cloneIdx)) do
+        if setCloneInPull(pulls, pullIdx, c.enemyIdx, c.cloneIdx, add) then
+            changed = true
+        end
+    end
+    if not changed then return end
+
+    -- Tell the map's deferred refresh to re-render in place (no camera jump).
+    self._editingPull = true
+
+    -- Keep MDT's own window in sync if the user happens to have it open.
+    if MDT.main_frame and MDT.main_frame.IsShown and MDT.main_frame:IsShown() then
+        pcall(function()
+            if MDT.ReloadPullButtons then MDT:ReloadPullButtons() end
+            if MDT.UpdateProgressbar then MDT:UpdateProgressbar() end
+            if MDT.SetSelectionToPull and MDT.GetCurrentPull then
+                MDT:SetSelectionToPull(MDT:GetCurrentPull())
+            end
+        end)
+    end
+
+    -- Rebuild our route view without losing live-run progress, preserving the
+    -- per-pull completion flags (pull indices are stable across mob add/remove).
+    local prevCompleted, prevIncomplete = {}, {}
+    for i, p in ipairs(self.pulls) do
+        prevCompleted[i] = p.completed
+        prevIncomplete[i] = p.incomplete
+    end
+    self:RebuildPullData()
+    for i, p in ipairs(self.pulls) do
+        p.completed = prevCompleted[i]
+        p.incomplete = prevIncomplete[i]
+    end
+    if self.currentPullIdx > #self.pulls then
+        self.currentPullIdx = math.max(#self.pulls, 1)
+    end
+
+    if self.RefreshMapPopout then self:RefreshMapPopout(true) end
 end
 
 ------------------------------------------------------------------------

@@ -205,6 +205,11 @@ MakeCheckboxPair(
     end,
     "Show all pulls on the map instead of just the current one")
 
+MakeCheckbox("Edit Pulls on Map",
+    function() return H.db.mapEditPulls end,
+    function(v) H.db.mapEditPulls = v end,
+    "Left-click a mob on the map popout to add it to the current pull, right-click to remove it. Social-aggro linked mobs are included automatically.")
+
 MakeCheckboxPair(
     "Forces on Nameplates",
     function() return H.db.forcesOverlay end,
