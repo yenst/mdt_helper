@@ -340,8 +340,40 @@ end
 
 local function LoadMapTextures(dungeonIdx, sublevel)
     HideAllTiles()
-    if not MDT or not MDT.dungeonMaps then return false end
-    local mapData = MDT.dungeonMaps[dungeonIdx]
+    local legacy = rawget(_G, "MDT")
+    if not legacy or not legacy.dungeonMaps then
+        -- MDT 6.2 keeps map metadata private, but its rendered tile textures
+        -- are still available on the public UI frame. Mirror those textures.
+        local source = rawget(_G, "MDTFrame")
+        if not source then return false end
+        local shown = false
+        for i = 1, 12 do
+            local src = source["mapPanelTile" .. i]
+            local texture = src and src.GetTexture and src:GetTexture()
+            if texture and (not src.IsShown or src:IsShown()) then
+                tiles4[i]:SetTexture(texture)
+                tiles4[i]:Show()
+                shown = true
+            end
+        end
+        for i = 1, 10 do
+            for j = 1, 15 do
+                local src = source["largeMapPanelTile" .. i .. j]
+                local texture = src and src.GetTexture and src:GetTexture()
+                if texture and (not src.IsShown or src:IsShown()) then
+                    tiles15[i][j]:SetTexture(texture)
+                    tiles15[i][j]:Show()
+                    shown = true
+                end
+            end
+        end
+        if shown then
+            currentSublevel = sublevel
+            currentDungeonIdx = dungeonIdx
+        end
+        return shown
+    end
+    local mapData = legacy.dungeonMaps[dungeonIdx]
     if not mapData then return false end
 
     local textureInfo = mapData[sublevel]
@@ -351,8 +383,8 @@ local function LoadMapTextures(dungeonIdx, sublevel)
         -- Blizzard textures
         local mapName = mapData[0] or ""
         local tileFormat = 4
-        if MDT.GetTileFormat then
-            tileFormat = MDT:GetTileFormat(dungeonIdx, sublevel)
+        if legacy.GetTileFormat then
+            tileFormat = legacy:GetTileFormat(dungeonIdx, sublevel)
         end
         local path = "Interface\\WorldMap\\" .. mapName .. "\\"
         if tileFormat == 4 then
@@ -761,8 +793,11 @@ local UpdateFullRouteLabels -- forward declare
 
 local function UpdateSublevelButtons(dungeonIdx)
     for _, btn in ipairs(sublevelButtons) do btn:Hide() end
-    if not MDT or not MDT.dungeonSubLevels then return end
-    local sublevels = MDT.dungeonSubLevels[dungeonIdx]
+    local legacy = rawget(_G, "MDT")
+    -- The modern public API can name sublevels but cannot switch MDT's private
+    -- map renderer, so only expose floor switching on legacy MDT builds.
+    if not legacy or not legacy.dungeonSubLevels then return end
+    local sublevels = legacy.dungeonSubLevels[dungeonIdx]
     if not sublevels or #sublevels <= 1 then return end
 
     for i = 1, #sublevels do
@@ -792,8 +827,8 @@ local function UpdateSublevelButtons(dungeonIdx)
             end)
             btn:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-                local sl = MDT and MDT.dungeonSubLevels and H.dungeonIdx
-                    and MDT.dungeonSubLevels[H.dungeonIdx]
+                local sl = legacy and legacy.dungeonSubLevels and H.dungeonIdx
+                    and legacy.dungeonSubLevels[H.dungeonIdx]
                 GameTooltip:SetText(sl and sl[self.idx] or ("Floor " .. self.idx), 1, 1, 1)
                 GameTooltip:Show()
             end)

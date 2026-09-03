@@ -330,10 +330,8 @@ local function ShowDungeonDropdown()
     end
 
     local currentIdx
-    if MDT and MDT.GetDB then
-        local db = MDT:GetDB()
-        if db then currentIdx = db.currentDungeonIdx end
-    end
+    local db = H:GetMDTDB()
+    if db then currentIdx = db.currentDungeonIdx end
     local isOverride = H.db.dungeonOverride ~= nil
     local totalEntries = #list + 1 -- +1 for "Auto"
 

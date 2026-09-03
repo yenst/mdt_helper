@@ -22,6 +22,7 @@ A forces progress bar at the top tracks your overall enemy forces completion.
 - **Scrollable** — mouse wheel scrolls the pull list
 - **Share route** — send your MDT route to the group or copy the export string (header `S` button or `/mdth share` / `/mdth copy`)
 - **Auto-import** — automatically imports routes shared by the party leader (toggleable in settings)
+- **Bundled community routes** — adds one starter route for each current-season dungeon and selects it on entry only when the current preset has no route
 - **Settings panel** — `/mdth settings` to adjust opacity, toggle auto-import, lock/unlock the frame, and reset position & size
 - **Key completion** — all pulls marked done when the key completes
 
@@ -45,6 +46,9 @@ A forces progress bar at the top tracks your overall enemy forces completion.
 ## Requirements
 
 - **Mythic Dungeon Tools (MDT)** — required dependency; the route data comes from MDT's active preset
+- With MDT 6.2+, keep **Mythic Dungeon Tools (MDT) - UI** enabled. It loads on demand when route data is needed.
+
+Sharing, copying, and leader auto-import support modern MDT's `!~MDT2~` format. Older MDT installations retain their legacy sharing/export/import path. Modern map-popout floor buttons are still unavailable; choose the floor in MDT itself.
 
 ## Installation
 
@@ -55,3 +59,7 @@ World of Warcraft/_retail_/Interface/AddOns/MDTHelper/
 ```
 
 Make sure MDT is also installed, then `/reload` or restart the game client.
+
+## Compatibility tests
+
+Run `lua tests/mdt_compat_test.lua` from the repository root. These tests mock WoW APIs and cover modern and legacy route actions, delayed loading, leader checks, import preservation, preset changes, and mob-edit refreshes. Verify sharing a large route between two clients, copying/importing an export, and changing/editing presets in-game before publishing a release.

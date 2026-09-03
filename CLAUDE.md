@@ -26,4 +26,4 @@ The `## Interface:` line in the `.toc` must match the current WoW client version
 - Addons are sandboxed; global state is shared across all addons. Namespace all globals under a single table: `MDTHelper = MDTHelper or {}`.
 - Event-driven: register events on a Frame with `frame:RegisterEvent("EVENT_NAME")` and handle them in `frame:SetScript("OnEvent", handler)`.
 - Slash commands are registered via `SlashCmdList["MDTHELPER"] = handler; SLASH_MDTHELPER1 = "/mdthelper"`.
-- MDT exposes a global API table; check `MDT` or `MythicDungeonTools` globals to interact with it.
+- Legacy MDT exposes `_G.MDT`; MDT 6.2+ exposes `_G.MythicDungeonToolsAPI` and keeps its route implementation private in `MythicDungeonTools_UI`. Use MDTHelper's compatibility helpers and do not assume the old global or `MDTcommsObject` exists.

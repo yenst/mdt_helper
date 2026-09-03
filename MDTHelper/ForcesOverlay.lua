@@ -4,25 +4,28 @@ local issecretvalue = issecretvalue or function() return false end
 
 ------------------------------------------------------------------------
 -- Get raw forces values for a unit token (12.0.5+ API)
--- Returns rawValue, rawPercent or nil. Values may be SECRET — do NOT
+-- Returns rawValue, rawPercent, rawPercentText or nil. Values may be SECRET — do NOT
 -- call tonumber/tostring on them. Use SetFormattedText for display.
 ------------------------------------------------------------------------
 local function GetRawForces(unitToken)
     if not unitToken then return nil end
     if not C_ScenarioInfo or not C_ScenarioInfo.GetUnitCriteriaProgressValues then return nil end
-    local ok, value, percent = pcall(C_ScenarioInfo.GetUnitCriteriaProgressValues, unitToken)
-    if not ok or value == nil or percent == nil then return nil end
-    return value, percent
+    local ok, value, percent, percentText = pcall(C_ScenarioInfo.GetUnitCriteriaProgressValues, unitToken)
+    if not ok then return nil end
+    return value, percent, percentText
 end
 
 -- Non-secret version for calculations (returns nil if values are secret)
 function H:GetUnitForcesInfo(unitToken)
     local value, percent = GetRawForces(unitToken)
-    if not value then return nil end
     if issecretvalue(value) or issecretvalue(percent) then return nil end
+    if value == nil or percent == nil then return nil end
     value = tonumber(value) or 0
     percent = tonumber(percent) or 0
     if value <= 0 and percent <= 0 then return nil end
+    -- Since 12.0.7 percentValue uses the [0, 1] range. Keep this helper's
+    -- historical percentage-point return value for any internal callers.
+    if percent <= 1 then percent = percent * 100 end
     return value, percent
 end
 
@@ -32,7 +35,8 @@ end
 local function SafeUnitGUID(unit)
     if not unit then return nil end
     local guid = UnitGUID(unit)
-    if guid and not issecretvalue(guid) and type(guid) == "string" then return guid end
+    if issecretvalue(guid) then return nil end
+    if type(guid) == "string" then return guid end
     return nil
 end
 
@@ -69,8 +73,8 @@ local function GetOrCreateOverlay(nameplate)
 end
 
 local function ShowOverlay(nameplate, unitToken)
-    local rawVal, rawPct = GetRawForces(unitToken)
-    if not rawPct then return false end
+    local _, rawPct, rawPctText = GetRawForces(unitToken)
+    if not issecretvalue(rawPct) and rawPct == nil then return false end
 
     local fs, parent = GetOrCreateOverlay(nameplate)
     fs:ClearAllPoints()
@@ -87,8 +91,14 @@ local function ShowOverlay(nameplate, unitToken)
         fs:SetPoint("BOTTOM", anchor, "TOP", 0, 2)
     end
 
-    -- SetFormattedText handles secret values internally
-    local ok = pcall(fs.SetFormattedText, fs, "%.1f%%", rawPct)
+    -- SetFormattedText handles secret values internally. Blizzard's formatted
+    -- return also accounts for percentValue changing to [0, 1] in 12.0.7.
+    local ok
+    if issecretvalue(rawPctText) or rawPctText ~= nil then
+        ok = pcall(fs.SetFormattedText, fs, "%s", rawPctText)
+    else
+        ok = pcall(fs.SetFormattedText, fs, "%.1f%%", rawPct)
+    end
     if ok then
         fs:Show()
         return true
@@ -133,13 +143,17 @@ local function InitTooltip()
     TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, function(tooltip)
         if not H.db or not H.db.forcesTooltip then return end
         if not H.activeDungeon then return end
-        local rawVal, rawPct = GetRawForces("mouseover")
-        if not rawPct then return end
+        local _, rawPct, rawPctText = GetRawForces("mouseover")
+        if not issecretvalue(rawPct) and rawPct == nil then return end
         tooltip:AddLine(" ")
         local n = tooltip:NumLines()
         local textLeft = _G[tooltip:GetName() .. "TextLeft" .. n]
         if textLeft then
-            pcall(textLeft.SetFormattedText, textLeft, "|cFF33FF99Forces:|r %.2f%%", rawPct)
+            if issecretvalue(rawPctText) or rawPctText ~= nil then
+                pcall(textLeft.SetFormattedText, textLeft, "|cFF33FF99Forces:|r %s", rawPctText)
+            else
+                pcall(textLeft.SetFormattedText, textLeft, "|cFF33FF99Forces:|r %.2f%%", rawPct)
+            end
             tooltip:Show()
         end
     end)
