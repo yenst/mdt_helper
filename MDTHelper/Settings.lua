@@ -1,4 +1,5 @@
 local H = MDTHelper
+local L = H.L
 
 ------------------------------------------------------------------------
 -- WoW Settings panel for MDTHelper
@@ -14,7 +15,7 @@ header:SetText("MDTHelper")
 
 local version = optionsFrame:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
 version:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -4)
-version:SetText("Live route guide for MDT dungeon routes")
+version:SetText(L["Live route guide for MDT dungeon routes"])
 
 ------------------------------------------------------------------------
 -- Helpers
@@ -180,78 +181,86 @@ end
 ------------------------------------------------------------------------
 
 MakeCheckboxPair(
-    "Auto-Import Route",
+    L["Auto-Import Route"],
     function() return H.db.autoImport end,
     function(v) H.db.autoImport = v end,
-    "Automatically import the party leader's MDT route when entering a dungeon",
-    "Auto-Advance Pulls",
+    L["Automatically import the party leader's MDT route when entering a dungeon"],
+    L["Auto-Advance Pulls"],
     function() return H.db.autoAdvance end,
-    function(v) H.db.autoAdvance = v end,
-    "Automatically advance to the next pull based on enemy forces gained")
+    function(v) H:SetAutoAdvance(v) end,
+    L["Automatically advance to the next pull based on enemy forces gained"])
 
 MakeCheckboxPair(
-    "Lock Frame",
+    L["Lock Frame"],
     function() return H.db.locked end,
     function(v)
         H.db.locked = v
         if H.UpdateUI then H:UpdateUI() end
     end,
-    "Prevent moving and resizing the route guide frame",
-    "Full Route on Map",
+    L["Prevent moving and resizing the route guide frame"],
+    L["Full Route on Map"],
     function() return H.db.mapFullRoute end,
     function(v)
         H.db.mapFullRoute = v
         if H.RefreshMapPopout then H:RefreshMapPopout() end
     end,
-    "Show all pulls on the map instead of just the current one")
+    L["Show all pulls on the map instead of just the current one"])
 
-MakeCheckbox("Edit Pulls on Map",
+MakeCheckbox(L["Edit Pulls on Map"],
     function() return H.db.mapEditPulls end,
     function(v) H.db.mapEditPulls = v end,
-    "Left-click a mob on the map popout to add it to the current pull, right-click to remove it. Social-aggro linked mobs are included automatically.")
+    L["Left-click a mob on the map popout to add it to the current pull, right-click to remove it. Social-aggro linked mobs are included automatically."])
 
 MakeCheckboxPair(
-    "Forces on Nameplates",
+    L["Forces on Nameplates"],
     function() return H.db.forcesOverlay end,
     function(v) H.db.forcesOverlay = v end,
-    "Show forces percentage on enemy nameplates in M+ dungeons",
-    "Forces in Tooltip",
+    L["Show forces percentage on enemy nameplates in M+ dungeons"],
+    L["Forces in Tooltip"],
     function() return H.db.forcesTooltip end,
     function(v) H.db.forcesTooltip = v end,
-    "Show forces percentage in enemy tooltips in M+ dungeons")
+    L["Show forces percentage in enemy tooltips in M+ dungeons"])
 
-MakeDropdown("Forces Position", {
-    { label = "Top",    value = "TOP" },
-    { label = "Bottom", value = "BOTTOM" },
-    { label = "Left",   value = "LEFT" },
-    { label = "Right",  value = "RIGHT" },
+MakeDropdown(L["Forces Position"], {
+    { label = L["Top"],    value = "TOP" },
+    { label = L["Bottom"], value = "BOTTOM" },
+    { label = L["Left"],   value = "LEFT" },
+    { label = L["Right"],  value = "RIGHT" },
 }, function() return H.db.forcesPosition or "RIGHT" end,
    function(v) H.db.forcesPosition = v end,
-   "Where to show the forces % on nameplates (click to cycle)")
+   L["Where to show the forces % on nameplates (click to cycle)"])
 
-MakeCheckbox("Efficiency Tracker",
+MakeCheckbox(L["Efficiency Tracker"],
     function() return H.db.efficiencyTracker end,
     function(v) H.db.efficiencyTracker = v end,
-    "Show ahead/behind indicator comparing actual vs planned forces")
+    L["Show ahead/behind indicator comparing actual vs planned forces"])
+
+MakeCheckbox(L["Compact Mode"],
+    function() return H.db.compactMode end,
+    function(v)
+        H.db.compactMode = v
+        if H.UpdateUI then H:UpdateUI() end
+    end,
+    L["Keep the current pull collapsed to a single row. Also works in minimized mode."])
 
 ------------------------------------------------------------------------
 -- Sliders
 ------------------------------------------------------------------------
 
-MakeSlider("Opacity", 0.1, 1.0, 0.05, PctFmt,
+MakeSlider(L["Opacity"], 0.1, 1.0, 0.05, PctFmt,
     function() return H.db.bgAlpha or 1 end,
     function(v)
         H.db.bgAlpha = v
         if H.ApplyOpacity then H:ApplyOpacity(v) end
     end,
-    "Background transparency of the route guide")
+    L["Background transparency of the route guide"])
 
-MakeSlider("Pull Accuracy", 0.5, 1.0, 0.05, PctFmt,
-    function() return H.db.pullThreshold or 0.9 end,
+MakeSlider(L["Pull Accuracy"], 0.5, 1.0, 0.05, PctFmt,
+    function() return H.db.pullThreshold or 1 end,
     function(v) H.db.pullThreshold = v end,
-    "How much of a pull's forces must be killed before auto-advancing")
+    L["Forces required before auto-advancing. Default: 100% (the full planned pull). Lower this to allow a margin for skipped mobs. If you go off route, disable Auto-Advance and navigate manually."])
 
-MakeSlider("UI Scale", 0.5, 2.0, 0.05, PctFmt,
+MakeSlider(L["UI Scale"], 0.5, 2.0, 0.05, PctFmt,
     function() return H.db.uiScale or 1 end,
     function(v)
         H.db.uiScale = v
@@ -272,11 +281,11 @@ MakeSlider("UI Scale", 0.5, 2.0, 0.05, PctFmt,
             end
         end
     end,
-    "Scale of the route guide frame")
+    L["Scale of the route guide frame"])
 
 local function PxFmt(val) return math.floor(val + 0.5) .. "px" end
 
-MakeSlider("Map Width", 150, 800, 10, PxFmt,
+MakeSlider(L["Map Width"], 150, 800, 10, PxFmt,
     function()
         return H.db.mapPopoutSize and H.db.mapPopoutSize[1] or 300
     end,
@@ -287,9 +296,9 @@ MakeSlider("Map Width", 150, 800, 10, PxFmt,
         if mf then mf:SetWidth(v) end
         if H.RefreshMapPopout then H:RefreshMapPopout() end
     end,
-    "Width of the map popout window")
+    L["Width of the map popout window"])
 
-MakeSlider("Map Height", 150, 800, 10, PxFmt,
+MakeSlider(L["Map Height"], 150, 800, 10, PxFmt,
     function()
         return H.db.mapPopoutSize and H.db.mapPopoutSize[2] or 300
     end,
@@ -300,15 +309,28 @@ MakeSlider("Map Height", 150, 800, 10, PxFmt,
         if mf then mf:SetHeight(v) end
         if H.RefreshMapPopout then H:RefreshMapPopout() end
     end,
-    "Height of the map popout window")
+    L["Height of the map popout window"])
 
 ------------------------------------------------------------------------
--- Reset button
+-- Route import and reset buttons
 ------------------------------------------------------------------------
+local importBtn = CreateFrame("Button", nil, optionsFrame, "UIPanelButtonTemplate")
+importBtn:SetSize(180, 24)
+importBtn:SetPoint("TOPLEFT", lastWidget, "BOTTOMLEFT", -2, -10)
+importBtn:SetText(L["Import Bundled Routes"])
+importBtn:SetScript("OnClick", function() H:ImportBundledRoutes() end)
+importBtn:SetScript("OnEnter", function(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(L["Import Bundled Routes"], 1, 1, 1)
+    GameTooltip:AddLine(L["Add missing bundled community routes to MDT, including routes you previously deleted. Existing routes and your selection are preserved."], nil, nil, nil, true)
+    GameTooltip:Show()
+end)
+importBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
 local resetBtn = CreateFrame("Button", nil, optionsFrame, "UIPanelButtonTemplate")
 resetBtn:SetSize(180, 24)
-resetBtn:SetPoint("TOPLEFT", lastWidget, "BOTTOMLEFT", -2, -10)
-resetBtn:SetText("Reset Position & Size")
+resetBtn:SetPoint("LEFT", importBtn, "RIGHT", 10, 0)
+resetBtn:SetText(L["Reset Position & Size"])
 resetBtn:SetScript("OnClick", function()
     H.db.framePoint = nil
     H.db.frameHeight = nil
@@ -320,7 +342,7 @@ resetBtn:SetScript("OnClick", function()
         guide:SetPoint("TOPLEFT", UIParent, "TOPLEFT", UIParent:GetWidth() - 260, -200)
     end
     if H.UpdateUI then H:UpdateUI() end
-    print("|cff00ccffMDTHelper|r: Position and size reset to default")
+    print(L["|cff00ccffMDTHelper|r: Position and size reset to default"])
 end)
 
 ------------------------------------------------------------------------

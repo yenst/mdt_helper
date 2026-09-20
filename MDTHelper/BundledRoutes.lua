@@ -1,4 +1,5 @@
 local _, H = ...
+local L = H.L
 
 -- Community MDT2 exports supplied by the addon maintainer and sourced from
 -- Keystone.guru. These are one-time seeds: a route is never replaced, and
@@ -82,7 +83,6 @@ local function AlreadyPresent(presets, preset, seedID)
         if type(existing) == "table" then
             if existing.mdtHelperSeedID == seedID then return true end
             if preset.uid and existing.uid == preset.uid then return true end
-            if existing.text == preset.text then return true end
         end
     end
     return false
@@ -91,6 +91,16 @@ end
 local function InsertWithoutSelecting(db, dungeonIdx, preset)
     local presets = db.presets and db.presets[dungeonIdx]
     if type(presets) ~= "table" then return false end
+
+    local names = {}
+    for _, existing in pairs(presets) do
+        if type(existing) == "table" then names[existing.text or ""] = true end
+    end
+    local originalName, suffix = preset.text, 2
+    while names[preset.text] do
+        preset.text = originalName .. " " .. suffix
+        suffix = suffix + 1
+    end
 
     local insertAt = #presets + 1
     if presets[#presets] and presets[#presets].value == 0 then insertAt = #presets end
@@ -113,8 +123,7 @@ local function FindBundledRoutePreset(db, route)
     for presetIdx, preset in ipairs(presets) do
         if type(preset) == "table" and preset.value ~= 0 then
             if preset.mdtHelperSeedID == route.id
-                or (bundledPreset.uid and preset.uid == bundledPreset.uid)
-                or preset.text == bundledPreset.text then
+                or (bundledPreset.uid and preset.uid == bundledPreset.uid) then
                 return presetIdx
             end
         end
@@ -185,32 +194,92 @@ function H:SelectBundledRoute(dungeonIdx)
     return true, true
 end
 
-function H:SeedBundledRoutes()
+local function RefreshPresetList(db)
+    local legacy = rawget(_G, "MDT")
+    local frame = rawget(_G, "MDTFrame") or (legacy and legacy.main_frame)
+    local group = frame and frame.sidePanel and frame.sidePanel.WidgetGroup
+    local dropdown = group and group.PresetDropDown
+    local presets = db.presets[db.currentDungeonIdx]
+    if not dropdown or not presets then return end
+    local labels = {}
+    for idx, preset in pairs(presets) do labels[idx] = preset.text end
+    if dropdown.SetList then dropdown:SetList(labels) end
+    -- Updating the labels must not fire a selection callback or reset a run.
+    if dropdown.SetValue then dropdown:SetValue(db.currentPreset[db.currentDungeonIdx]) end
+end
+
+function H:SeedBundledRoutes(force, silent)
     if not self.db then return false end
+    if self._bundledImportPending and not force then return false end
     self.db.bundledRouteSeeds = self.db.bundledRouteSeeds or {}
 
     local mdtDB = self:GetMDTDB()
-    if not mdtDB or type(mdtDB.presets) ~= "table" then return false end
+    if not mdtDB or type(mdtDB.presets) ~= "table"
+        or type(mdtDB.currentPreset) ~= "table" then return false end
 
-    local added = 0
+    local added, present, unavailable = 0, 0, 0
     for _, route in ipairs(routes) do
-        if not self.db.bundledRouteSeeds[route.id] then
+        if force or not self.db.bundledRouteSeeds[route.id] then
             local preset = DecodeRoute(route.encoded)
             local dungeonPresets = mdtDB.presets[route.dungeonIdx]
             if IsValidPreset(preset, route.dungeonIdx) and type(dungeonPresets) == "table" then
                 if not AlreadyPresent(dungeonPresets, preset, route.id) then
                     preset.mdtHelperSeedID = route.id
                     if InsertWithoutSelecting(mdtDB, route.dungeonIdx, preset) then added = added + 1 end
+                else
+                    present = present + 1
                 end
                 self.db.bundledRouteSeeds[route.id] = true
+            else
+                unavailable = unavailable + 1
             end
         end
     end
 
     if added > 0 then
-        print(("|cff00ccffMDTHelper|r: Added %d bundled community routes to MDT; existing routes were unchanged."):format(added))
+        RefreshPresetList(mdtDB)
+        if not silent then
+            print((L["|cff00ccffMDTHelper|r: Added %d bundled community routes to MDT; existing routes were unchanged."]):format(added))
+        end
     end
-    return true
+    return true, added, present, unavailable
+end
+
+-- Explicit import ignores the one-time seed history, so deleted routes or an
+-- MDT database reset can be recovered without resetting MDTHelper settings.
+function H:ImportBundledRoutes()
+    if self._bundledImportPending then return end
+    self._bundledImportPending = true
+    local attempts, totalAdded = 0, 0
+    local function PollImport()
+        attempts = attempts + 1
+        local ready, added, present, unavailable = H:SeedBundledRoutes(true, true)
+        totalAdded = totalAdded + (added or 0)
+        if (ready and unavailable == 0) or attempts >= 100 then
+            H._bundledImportPending = nil
+            if not ready then
+                print(L["|cff00ccffMDTHelper|r: Could not load MDT routes. Enable MDT's UI addon and try importing again."])
+                return
+            end
+            RefreshPresetList(H:GetMDTDB())
+            -- Earlier polling passes may already have added some of the routes.
+            local existing = math.max(0, present + added - totalAdded)
+            print((L["|cff00ccffMDTHelper|r: Bundled routes: %d imported, %d already present, %d unavailable. Your selected route is unchanged."]):format(totalAdded, existing, unavailable))
+            if unavailable > 0 then
+                print(L["|cff00ccffMDTHelper|r: Some bundled dungeons or exports could not be loaded. Check MDT and MDT Legacy are up to date, then try again."])
+            end
+            return
+        end
+        if attempts == 1 then
+            print(L["|cff00ccffMDTHelper|r: Importing bundled routes; waiting for MDT's route data..."])
+            if not ready then
+                local api = H:GetMDTAPI()
+                if api and api.ShowInterface then pcall(api.ShowInterface, api) end
+            end
+        end
+        C_Timer.After(0.1, PollImport)
+    end
+    PollImport()
 end
 
 -- Seed as soon as MDT's UI/data layer becomes available, without forcing that

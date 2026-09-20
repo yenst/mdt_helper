@@ -109,6 +109,8 @@ local function setup()
     }
 
     local H = {}
+    _G.GetLocale = function() return "enUS" end
+    assert(loadfile("MDTHelper/Locales.lua"))("MDTHelper", H)
     assert(loadfile("MDTHelper/Core.lua"))("MDTHelper", H)
     H.BuildRoute = function() state.rebuilds = state.rebuilds + 1 end
     H.EnsureModernMDTReady = function() state.loadRequests = (state.loadRequests or 0) + 1 end
@@ -337,6 +339,192 @@ test("modern mob edits redraw MDT before rebuilding and preserve progress", func
     assert(#s.db.presets[1][1].value.pulls[1][1] == 2)
     s:flush()
     assert(s.editedRebuild and H.pulls[1].completed == true)
+end)
+
+test("mob edits immediately recheck forces after the deferred redraw", function()
+    local s, H = setup()
+    s:dropdown()
+    H.pulls = { { totalForces = 100 }, { totalForces = 100 } }
+    H.pullForcesAccum = 80
+    H.RebuildPullData = function()
+        H.pulls = { { totalForces = 60 }, { totalForces = 140 } }
+    end
+    H:TogglePullMob(1, 2, true)
+    assert(H.currentPullIdx == 1)
+    s:flush()
+    assert(H.currentPullIdx == 2 and H.pulls[1].completed and H.pullForcesAccum == 20)
+end)
+
+test("mob edits keep manual tracking manual", function()
+    local s, H = setup()
+    s:dropdown()
+    H.db.autoAdvance = false
+    H.pulls = { { totalForces = 100 } }
+    H.RebuildPullData = function()
+        H.pulls = { { totalForces = 0, enemies = {} }, { totalForces = 100 } }
+    end
+    H:TogglePullMob(1, 2, true)
+    s:flush()
+    assert(H.currentPullIdx == 1 and not H.pulls[1].completed)
+end)
+
+-- The native codec is mocked as above, but use the actual bundled record list
+-- so every shipped route participates in import/readiness/duplicate checks.
+local function setupBundles()
+    local s, H = setup()
+    local file = assert(io.open("MDTHelper/BundledRoutes.lua", "r"))
+    local source = file:read("*a")
+    file:close()
+    local decoded = {}
+    s.bundleIndices = {}
+    for idxText, encoded in source:gmatch("dungeonIdx = (%d+),%s+encoded = %[%[(.-)%]%]") do
+        local idx = tonumber(idxText)
+        local route = preset("Starter " .. idx)
+        route.value.currentDungeonIdx = idx
+        route.uid = "bundled" .. idx
+        decoded[encoded:sub(8)] = route
+        s.bundleIndices[#s.bundleIndices + 1] = idx
+        s.db.presets[idx] = { preset("My route"), { text = "<New Preset>", value = 0 } }
+        s.db.presets[idx][1].value.currentDungeonIdx = idx
+        s.db.currentPreset[idx] = 1
+    end
+    assert(#s.bundleIndices == 8)
+    s.db.currentDungeonIdx = s.bundleIndices[1]
+    C_EncodingUtil.DecodeBase64 = function(value) return value end
+    C_EncodingUtil.DecompressString = function(value) return value end
+    C_EncodingUtil.DeserializeCBOR = function(value) return copy(decoded[value]) end
+    assert(loadfile("MDTHelper/BundledRoutes.lua"))("MDTHelper", H)
+    s:dropdown()
+    return s, H
+end
+
+test("automatic seeds appear alongside existing routes without changing selection", function()
+    local s, H = setupBundles()
+    local idx = s.db.currentDungeonIdx
+    local selected = s.db.presets[idx][1]
+    H:HookModernPresetChanges()
+    local ready, added = H:SeedBundledRoutes()
+    s:flush()
+    assert(ready and added == 8 and #s.db.presets[idx] == 3)
+    assert(s.labels[2] == "Starter " .. idx)
+    assert(s.db.presets[idx][s.db.currentPreset[idx]] == selected)
+    assert(not s.fired and s.rebuilds == 0)
+    H:SelectBundledRoute(idx)
+    assert(s.db.currentPreset[idx] == 1, "nonempty user routes must remain selected")
+end)
+
+test("manual import restores deleted seeds and remains idempotent", function()
+    local s, H = setupBundles()
+    H:SeedBundledRoutes()
+    local idx = s.db.currentDungeonIdx
+    table.remove(s.db.presets[idx], 2)
+    H:SeedBundledRoutes()
+    assert(#s.db.presets[idx] == 2, "automatic seeding must honor deliberate deletion")
+    H:ImportBundledRoutes()
+    assert(#s.db.presets[idx] == 3)
+    assert(s.messages[#s.messages]:find("1 imported, 7 already present, 0 unavailable", 1, true))
+    s.labels = nil
+    H:ImportBundledRoutes()
+    assert(#s.db.presets[idx] == 3 and s.db.currentPreset[idx] == 1)
+    assert(s.labels[2] == "Starter " .. idx, "even an idempotent import refreshes the list")
+    assert(s.messages[#s.messages]:find("0 imported, 8 already present", 1, true))
+end)
+
+test("manual import recovers an MDT reset and preserves the selected sentinel", function()
+    local s, H = setupBundles()
+    H:SeedBundledRoutes()
+    for _, idx in ipairs(s.bundleIndices) do
+        s.db.presets[idx] = { { text = "<New Preset>", value = 0 } }
+        s.db.currentPreset[idx] = 1
+    end
+    H:ImportBundledRoutes()
+    for _, idx in ipairs(s.bundleIndices) do
+        assert(#s.db.presets[idx] == 2 and s.db.currentPreset[idx] == 2)
+        assert(s.db.presets[idx][2].value == 0)
+    end
+    assert(s.selection == 2 and not s.fired)
+    assert(s.messages[#s.messages]:find("8 imported, 0 already present", 1, true))
+end)
+
+test("same-name user presets do not block seeds or become the bundled fallback", function()
+    local s, H = setupBundles()
+    local idx = s.db.currentDungeonIdx
+    local userRoute = s.db.presets[idx][1]
+    userRoute.text = "Starter " .. idx
+    userRoute.value.pulls = {}
+    H:ImportBundledRoutes()
+    assert(s.db.presets[idx][1] == userRoute and not userRoute.mdtHelperSeedID)
+    assert(s.db.presets[idx][2].text == "Starter " .. idx .. " 2")
+    assert(s.db.currentPreset[idx] == 1)
+    H:SelectBundledRoute(idx)
+    assert(s.db.currentPreset[idx] == 2)
+    s.db.presets[idx][2].text = "Renamed bundled route"
+    H:ImportBundledRoutes()
+    assert(#s.db.presets[idx] == 3 and s.db.currentPreset[idx] == 2)
+end)
+
+test("manual import loads modern MDT once and waits for data", function()
+    local s, H = setupBundles()
+    local saved = s.db.presets
+    s.db.presets = nil
+    MythicDungeonToolsAPI.ShowInterface = function()
+        s.shows = (s.shows or 0) + 1
+        C_Timer.After(0, function()
+            s.db.presets = saved
+            s.initializer()
+        end)
+    end
+    H:ImportBundledRoutes()
+    H:ImportBundledRoutes()
+    assert(s.shows == 1 and H._bundledImportPending)
+    s:flush()
+    assert(not H._bundledImportPending)
+    assert(s.messages[#s.messages]:find("8 imported, 0 already present", 1, true))
+end)
+
+test("partial readiness waits and reports accurate import totals", function()
+    local s, H = setupBundles()
+    local idx = s.bundleIndices[2]
+    local saved = s.db.presets[idx]
+    s.db.presets[idx] = nil
+    H:ImportBundledRoutes()
+    assert(H._bundledImportPending)
+    s.db.presets[idx] = saved
+    s:flush()
+    assert(s.messages[#s.messages]:find("8 imported, 0 already present, 0 unavailable", 1, true))
+end)
+
+test("unavailable dungeons are reported and can be imported after retry", function()
+    local s, H = setupBundles()
+    local idx = s.bundleIndices[2]
+    local saved = s.db.presets[idx]
+    s.db.presets[idx] = nil
+    H:ImportBundledRoutes()
+    s:flush()
+    assert(not H._bundledImportPending)
+    assert(s.messages[#s.messages - 1]:find("7 imported, 0 already present, 1 unavailable", 1, true))
+    s.db.presets[idx] = saved
+    H:ImportBundledRoutes()
+    assert(s.messages[#s.messages]:find("1 imported, 7 already present, 0 unavailable", 1, true))
+end)
+
+test("unavailable MDT data times out with a retryable error", function()
+    local s, H = setupBundles()
+    s.db.presets = nil
+    H:ImportBundledRoutes()
+    s:flush()
+    assert(not H._bundledImportPending)
+    assert(s.messages[#s.messages]:find("Could not load MDT routes", 1, true))
+end)
+
+test("legacy manual import refreshes the dropdown without firing selection", function()
+    local s, H = setupBundles()
+    _G.MDT = { GetDB = function() return s.db end, main_frame = MDTFrame }
+    _G.MythicDungeonToolsAPI = nil
+    _G.MDTFrame = nil
+    H:ImportBundledRoutes()
+    assert(s.labels[2] and s.selection == 1 and not s.fired)
+    assert(s.messages[#s.messages]:find("8 imported, 0 already present", 1, true))
 end)
 
 realPrint(string.format("%d compatibility tests passed", passed))

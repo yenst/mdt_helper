@@ -1,4 +1,5 @@
 local H = MDTHelper
+local L = H.L
 
 ------------------------------------------------------------------------
 -- Constants — match MDT exactly: sizex=840, sizey=555
@@ -62,7 +63,7 @@ titleBg:SetColorTexture(0.08, 0.08, 0.08, 1)
 local titleText = titleBar:CreateFontString(nil, "OVERLAY")
 titleText:SetFont(FONT, 10, "OUTLINE")
 titleText:SetTextColor(0, 0.8, 1)
-titleText:SetText("Map")
+titleText:SetText(L["Map"])
 
 -- Nav buttons (prev/next pull)
 local prevPullBtn = CreateFrame("Button", nil, titleBar)
@@ -79,7 +80,7 @@ prevPullBtn:SetScript("OnClick", function() H:RetreatPull() end)
 prevPullBtn:SetScript("OnEnter", function(self)
     prevPullTxt:SetTextColor(0, 0.8, 1)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:SetText("Previous pull", 1, 1, 1)
+    GameTooltip:SetText(L["Previous pull"], 1, 1, 1)
     GameTooltip:Show()
 end)
 prevPullBtn:SetScript("OnLeave", function()
@@ -103,7 +104,7 @@ nextPullBtn:SetScript("OnClick", function() H:AdvancePull() end)
 nextPullBtn:SetScript("OnEnter", function(self)
     nextPullTxt:SetTextColor(0, 0.8, 1)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
-    GameTooltip:SetText("Next pull", 1, 1, 1)
+    GameTooltip:SetText(L["Next pull"], 1, 1, 1)
     GameTooltip:Show()
 end)
 nextPullBtn:SetScript("OnLeave", function()
@@ -149,11 +150,11 @@ end
 surroundBtn:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
     if H.db.mapFullRoute then
-        GameTooltip:SetText("Surrounding mobs", 0.5, 0.5, 0.5)
-        GameTooltip:AddLine("Not available in full route view", 0.5, 0.5, 0.5)
+        GameTooltip:SetText(L["Surrounding mobs"], 0.5, 0.5, 0.5)
+        GameTooltip:AddLine(L["Not available in full route view"], 0.5, 0.5, 0.5)
     else
         local on = H.db.mapShowSurround ~= false
-        GameTooltip:SetText("Surrounding mobs: " .. (on and "shown" or "hidden"), 1, 1, 1)
+        GameTooltip:SetText(L["Surrounding mobs: "] .. (on and L["shown"] or L["hidden"]), 1, 1, 1)
     end
     GameTooltip:Show()
 end)
@@ -189,8 +190,8 @@ end
 fullRouteBtn:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
     local on = H.db.mapFullRoute
-    GameTooltip:SetText("Full route: " .. (on and "all pulls" or "current pull only"), 1, 1, 1)
-    GameTooltip:AddLine("Toggle between current pull and full route view", 0.7, 0.7, 0.7)
+    GameTooltip:SetText(L["Full route: "] .. (on and L["all pulls"] or L["current pull only"]), 1, 1, 1)
+    GameTooltip:AddLine(L["Toggle between current pull and full route view"], 0.7, 0.7, 0.7)
     GameTooltip:Show()
 end)
 fullRouteBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -471,8 +472,8 @@ local function CreateBlip()
                     or "?"
                 txt = txt .. "\n|cffffffff" .. pct .. "|r"
             end
-            if self.mobIsBoss then txt = txt .. "\n|cffffff00Boss|r" end
-            if self.isSurrounding then txt = txt .. "\n|cffff4444Skip|r" end
+            if self.mobIsBoss then txt = txt .. L["\n|cffffff00Boss|r"] end
+            if self.isSurrounding then txt = txt .. L["\n|cffff4444Skip|r"] end
             GameTooltip:SetText(txt)
             GameTooltip:Show()
         end
@@ -829,7 +830,7 @@ local function UpdateSublevelButtons(dungeonIdx)
                 GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
                 local sl = legacy and legacy.dungeonSubLevels and H.dungeonIdx
                     and legacy.dungeonSubLevels[H.dungeonIdx]
-                GameTooltip:SetText(sl and sl[self.idx] or ("Floor " .. self.idx), 1, 1, 1)
+                GameTooltip:SetText(sl and sl[self.idx] or (L["Floor "] .. self.idx), 1, 1, 1)
                 GameTooltip:Show()
             end)
             btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1255,7 +1256,7 @@ zoomInBtn:SetScript("OnClick", function()
 end)
 zoomInBtn:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Zoom in", 1, 1, 1)
+    GameTooltip:SetText(L["Zoom in"], 1, 1, 1)
     GameTooltip:Show()
 end)
 zoomInBtn:SetScript("OnLeave", GameTooltip_Hide)
@@ -1273,7 +1274,7 @@ zoomOutBtn:SetScript("OnClick", function()
 end)
 zoomOutBtn:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Zoom out", 1, 1, 1)
+    GameTooltip:SetText(L["Zoom out"], 1, 1, 1)
     GameTooltip:Show()
 end)
 zoomOutBtn:SetScript("OnLeave", GameTooltip_Hide)
@@ -1293,7 +1294,7 @@ resetBtn:SetScript("OnClick", function()
 end)
 resetBtn:SetScript("OnEnter", function(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
-    GameTooltip:SetText("Reset view", 1, 1, 1)
+    GameTooltip:SetText(L["Reset view"], 1, 1, 1)
     GameTooltip:Show()
 end)
 resetBtn:SetScript("OnLeave", GameTooltip_Hide)
@@ -1414,9 +1415,9 @@ UpdateMapPopout = function(skipZoom)
     end
 
     if isFullRoute then
-        titleText:SetText("Route - Pull " .. H.currentPullIdx .. " / " .. #H.pulls)
+        titleText:SetText(string.format(L["Route - Pull %d / %d"], H.currentPullIdx, #H.pulls))
     else
-        titleText:SetText("Pull " .. H.currentPullIdx .. " / " .. #H.pulls)
+        titleText:SetText(string.format(L["Pull %d / %d"], H.currentPullIdx, #H.pulls))
     end
     UpdateSurroundBtnColor()
     UpdateFullRouteBtnColor()
@@ -1458,7 +1459,7 @@ function H:ToggleMapPopout()
     if mf:IsShown() then
         mf:Hide()
         self.db.mapPopout = false
-        print("|cff00ccffMDTHelper|r: Map popout hidden")
+        print(L["|cff00ccffMDTHelper|r: Map popout hidden"])
     else
         -- Build route from MDT if no pulls loaded (works outside dungeons)
         if not self.pulls or #self.pulls == 0 then
@@ -1466,13 +1467,13 @@ function H:ToggleMapPopout()
             self:BuildRoute()
         end
         if not self.pulls or #self.pulls == 0 then
-            print("|cff00ccffMDTHelper|r: No route loaded in MDT")
+            print(L["|cff00ccffMDTHelper|r: No route loaded in MDT"])
             return
         end
         self.db.mapPopout = true
         mf:Show()
         UpdateMapPopout()
-        print("|cff00ccffMDTHelper|r: Map popout shown")
+        print(L["|cff00ccffMDTHelper|r: Map popout shown"])
     end
 end
 

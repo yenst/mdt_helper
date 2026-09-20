@@ -1,4 +1,5 @@
 local H = MDTHelper
+local L = H.L
 
 ------------------------------------------------------------------------
 -- Config
@@ -188,9 +189,9 @@ SetBtnTexture(shareBtn, "Interface\\GossipFrame\\ChatBubbleGossipIcon", 14)
 shareBtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 shareBtn:SetScript("OnEnter", function(s)
     GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
-    GameTooltip:SetText("Share Route", 0, 0.8, 1)
-    GameTooltip:AddLine("Left-click: Send to group", 0.7, 0.7, 0.7)
-    GameTooltip:AddLine("Right-click: Copy export string", 0.7, 0.7, 0.7)
+    GameTooltip:SetText(L["Share Route"], 0, 0.8, 1)
+    GameTooltip:AddLine(L["Left-click: Send to group"], 0.7, 0.7, 0.7)
+    GameTooltip:AddLine(L["Right-click: Copy export string"], 0.7, 0.7, 0.7)
     GameTooltip:Show()
 end)
 shareBtn:SetScript("OnLeave", GameTooltip_Hide)
@@ -208,8 +209,8 @@ mapBtn:SetPoint("LEFT", shareBtn, "RIGHT", 2, 0)
 SetBtnAtlas(mapBtn, "poi-islands-table", 14)
 mapBtn:SetScript("OnEnter", function(s)
     GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
-    GameTooltip:SetText("Map Popout", 0, 0.8, 1)
-    GameTooltip:AddLine("Toggle dungeon map overlay", 0.7, 0.7, 0.7)
+    GameTooltip:SetText(L["Map Popout"], 0, 0.8, 1)
+    GameTooltip:AddLine(L["Toggle dungeon map overlay"], 0.7, 0.7, 0.7)
     GameTooltip:Show()
 end)
 mapBtn:SetScript("OnLeave", GameTooltip_Hide)
@@ -227,17 +228,17 @@ end
 UpdateAutoBtnColor()
 autoBtn:SetScript("OnEnter", function(s)
     GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
-    local state = H.db.autoAdvance and "|cff00ff00ON|r" or "|cffff4444OFF|r"
-    GameTooltip:SetText("Auto-Advance: " .. state, 0, 0.8, 1)
-    GameTooltip:AddLine("Toggle automatic pull tracking", 0.7, 0.7, 0.7)
+    local state = H.db.autoAdvance and L["|cff00ff00ON|r"] or L["|cffff4444OFF|r"]
+    GameTooltip:SetText(L["Auto-Advance: "] .. state, 0, 0.8, 1)
+    GameTooltip:AddLine(L["Toggle automatic pull tracking. Disable when going off route, then use previous/next to navigate manually."], 0.7, 0.7, 0.7, true)
     GameTooltip:Show()
 end)
 autoBtn:SetScript("OnLeave", GameTooltip_Hide)
 autoBtn:SetScript("OnClick", function()
-    H.db.autoAdvance = not H.db.autoAdvance
+    H:SetAutoAdvance(not H.db.autoAdvance)
     UpdateAutoBtnColor()
-    local state = H.db.autoAdvance and "enabled" or "disabled"
-    print("|cff00ccffMDTHelper|r: Auto-advance " .. state)
+    local state = H.db.autoAdvance and L["enabled"] or L["disabled"]
+    print(L["|cff00ccffMDTHelper|r: Auto-advance "] .. state)
 end)
 
 -- Dungeon selector button (dropdown to manually pick dungeon)
@@ -325,7 +326,7 @@ end
 local function ShowDungeonDropdown()
     local list = H:GetDungeonList()
     if #list == 0 then
-        print("|cff00ccffMDTHelper|r: No dungeon data from MDT")
+        print(L["|cff00ccffMDTHelper|r: No dungeon data from MDT"])
         return
     end
 
@@ -343,7 +344,7 @@ local function ShowDungeonDropdown()
     -- "Auto" option at the top
     local ab = ddButtons[1]
     ab:SetPoint("TOPLEFT", 0, 0)
-    ab.label:SetText("Auto (detect from zone)")
+    ab.label:SetText(L["Auto (detect from zone)"])
     ab.label:SetTextColor(0.5, 0.8, 1)
     ab.check:SetText(not isOverride and ">" or "")
     ab:SetScript("OnClick", function()
@@ -394,11 +395,11 @@ end
 -- Button tooltip and click
 dungeonSelBtn:SetScript("OnEnter", function(s)
     GameTooltip:SetOwner(s, "ANCHOR_BOTTOM")
-    local name = H:GetCurrentDungeonName() or "Unknown"
-    local mode = H.db.dungeonOverride and "|cffff8800Manual|r" or "|cff00ff00Auto|r"
-    GameTooltip:SetText("Dungeon: " .. name, 0, 0.8, 1)
-    GameTooltip:AddLine("Mode: " .. mode, 0.7, 0.7, 0.7)
-    GameTooltip:AddLine("Click to select dungeon", 0.7, 0.7, 0.7)
+    local name = H:GetCurrentDungeonName() or L["Unknown"]
+    local mode = H.db.dungeonOverride and L["|cffff8800Manual|r"] or L["|cff00ff00Auto|r"]
+    GameTooltip:SetText(L["Dungeon: "] .. name, 0, 0.8, 1)
+    GameTooltip:AddLine(L["Mode: "] .. mode, 0.7, 0.7, 0.7)
+    GameTooltip:AddLine(L["Click to select dungeon"], 0.7, 0.7, 0.7)
     GameTooltip:Show()
 end)
 dungeonSelBtn:SetScript("OnLeave", GameTooltip_Hide)
@@ -809,12 +810,13 @@ function H:_DoUpdateUI()
     local cur = self.currentPullIdx
     local n = #self.pulls
     local minimized = self.db.minimized
+    local expandCurrent = not self.db.compactMode
 
     -- Update minimize button icon direction
     minIcon:SetAtlas(minimized and "UI-HUD-Minimap-Zoom-In" or "UI-HUD-Minimap-Zoom-Out", false)
 
     -- Header
-    headerText:SetText("Pull " .. cur .. " / " .. total .. " |r")
+    headerText:SetText(string.format(L["Pull %d / %d"], cur, total) .. " |r")
 
     -- Forces bar — hide when minimized
     if minimized then
@@ -873,7 +875,7 @@ function H:_DoUpdateUI()
     -- Build the expanded block for the current pull
     local pull = self.pulls[cur]
     local expandedHeight = EXPANDED_TITLE_H
-    if pull then
+    if pull and expandCurrent then
         local numEnemies = #pull.enemies
         for i = 1, math.max(numEnemies, #expandedMobRows) do
             local row = GetExpandedMobRow(i)
@@ -934,7 +936,7 @@ function H:_DoUpdateUI()
     end
 
     -- Determine which pulls to show
-    -- In minimized mode: only current pull (expanded) + next pull (compact)
+    -- In minimized mode: only current pull + next pull
     -- In full mode: all pulls
     local showPull = {}
     if minimized then
@@ -952,7 +954,7 @@ function H:_DoUpdateUI()
         if i <= n and showPull[i] then
             local p = self.pulls[i]
 
-            if i == cur then
+            if i == cur and expandCurrent then
                 -- Place the expanded block here instead of a compact row
                 expandedBlock:SetPoint("TOPLEFT", listContent, "TOPLEFT", 0, -yOff)
                 yOff = yOff + expandedHeight + 2
@@ -1020,7 +1022,12 @@ function H:_DoUpdateUI()
                     row.cumPct:SetTextColor(0.25, 0.25, 0.25)
                     dimPortraits = true
                 else
-                    SetBg(row, 0.08, 0.08, 0.08, 0.7)
+                    if i == cur then
+                        SetBg(row, p.incomplete and 0.3 or 0.18, 0.12, 0.02, 0.9)
+                        pr, pg, pb = 1, 0.82, 0
+                    else
+                        SetBg(row, 0.08, 0.08, 0.08, 0.7)
+                    end
                     row.check:Hide()
                     if p.hasBoss then
                         row.num:Hide()

@@ -1,9 +1,10 @@
 local AddonName, NS = ...
+local L = NS.L
 
 -- Keybinding display names (must be globals for Blizzard Key Bindings UI)
 BINDING_HEADER_MDTHELPER = "MDT Helper"
-BINDING_NAME_MDTHELPER_NEXT_PULL = "Next Pull"
-BINDING_NAME_MDTHELPER_PREV_PULL = "Previous Pull"
+BINDING_NAME_MDTHELPER_NEXT_PULL = L["Next Pull"]
+BINDING_NAME_MDTHELPER_PREV_PULL = L["Previous Pull"]
 
 local H = NS
 
@@ -342,7 +343,7 @@ end
 
 -- Localize enemy name via MDT's translation table
 local function LocalName(name)
-    if not name then return "Unknown" end
+    if not name then return L["Unknown"] end
     local legacy = GetLegacyMDT()
     local L = legacy and legacy.L
     return L and L[name] or name
@@ -357,7 +358,7 @@ H.totalForcesRequired = 0
 H.activeDungeon = false
 H.completedCriteria = {}
 H.keyCompleted = false
-H.db = { enabled = true, locked = false, minimized = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 0.9, mapEditPulls = true }
+H.db = { enabled = true, locked = false, minimized = false, compactMode = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 1, mapEditPulls = true }
 H.inCombat = false
 H.combatForcesSnapshot = 0
 H.livePullPercent = 0
@@ -375,10 +376,11 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.enabled == nil then MDTHelperDB.enabled = true end
         if MDTHelperDB.locked == nil then MDTHelperDB.locked = false end
         if MDTHelperDB.minimized == nil then MDTHelperDB.minimized = false end
+        if MDTHelperDB.compactMode == nil then MDTHelperDB.compactMode = false end
         if MDTHelperDB.bgAlpha == nil then MDTHelperDB.bgAlpha = 1 end
         if MDTHelperDB.autoImport == nil then MDTHelperDB.autoImport = true end
         if MDTHelperDB.autoAdvance == nil then MDTHelperDB.autoAdvance = true end
-        if MDTHelperDB.pullThreshold == nil then MDTHelperDB.pullThreshold = 0.9 end
+        if MDTHelperDB.pullThreshold == nil then MDTHelperDB.pullThreshold = 1 end
         if MDTHelperDB.mapPopout == nil then MDTHelperDB.mapPopout = true end
         if MDTHelperDB.mapShowSurround == nil then MDTHelperDB.mapShowSurround = true end
         if MDTHelperDB.mapFullRoute == nil then MDTHelperDB.mapFullRoute = false end
@@ -412,8 +414,6 @@ combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 combatFrame:SetScript("OnEvent", function(_, event)
     if not H.activeDungeon then return end
-    if not H.db.autoAdvance then return end
-
     if event == "PLAYER_REGEN_DISABLED" then
         -- Entering combat: snapshot current forces
         H.inCombat = true
@@ -421,10 +421,11 @@ combatFrame:SetScript("OnEvent", function(_, event)
     elseif event == "PLAYER_REGEN_ENABLED" then
         H.inCombat = false
         local pull = H.pulls[H.currentPullIdx]
-        if pull and not pull.completed and pull.totalForces > 0 then
-            local forcesGainedThisCombat = H.totalForcesGained - H.combatForcesSnapshot
-            local threshold = H.db.pullThreshold or 0.8
-            if forcesGainedThisCombat > 0 and forcesGainedThisCombat < pull.totalForces * threshold then
+        if H.db.autoAdvance and pull and not pull.completed and pull.totalForces > 0 then
+            -- Combat may have completed several pulls. Only flag progress
+            -- belonging to the current pull, not the entire combat's forces.
+            local threshold = H.db.pullThreshold or 1
+            if H.pullForcesAccum > 0 and H.pullForcesAccum < pull.totalForces * threshold then
                 pull.incomplete = true
                 if H.UpdateUI then H:UpdateUI() end
             end
@@ -1041,19 +1042,23 @@ function H:TogglePullMob(enemyIdx, cloneIdx, add)
         H._editingPull = true
         -- Pull indices are stable across mob add/remove. Preserve the latest
         -- completion state, including progress made during a deferred redraw.
-        local prevCompleted, prevIncomplete = {}, {}
+        local prevCompleted, prevIncomplete, prevBossDefeated = {}, {}, {}
         for i, p in ipairs(H.pulls) do
             prevCompleted[i] = p.completed
             prevIncomplete[i] = p.incomplete
+            prevBossDefeated[i] = p.bossDefeated
         end
         H:RebuildPullData()
         for i, p in ipairs(H.pulls) do
             p.completed = prevCompleted[i]
             p.incomplete = prevIncomplete[i]
+            p.bossDefeated = prevBossDefeated[i]
         end
         if H.currentPullIdx > #H.pulls then
             H.currentPullIdx = math.max(#H.pulls, 1)
         end
+        H:AdvanceSatisfiedPulls()
+        if H.UpdateUI then H:UpdateUI() end
         if H.RefreshMapPopout then H:RefreshMapPopout(true) end
     end
 
@@ -1080,29 +1085,34 @@ H.pullForcesAccum = 0
 
 function H:CheckAutoAdvance(oldForces, newForces)
     if not self.db.autoAdvance then return end
-    if oldForces == 0 and newForces > 0 then
-        -- First update of the run, set baseline
-        self.pullForcesAccum = 0
-        return
-    end
     local delta = newForces - oldForces
     if delta <= 0 then return end
 
     self.pullForcesAccum = self.pullForcesAccum + delta
+    self:AdvanceSatisfiedPulls()
+end
 
-    local pull = self.pulls[self.currentPullIdx]
-    if not pull then return end
-
-    -- If we've accumulated enough of this pull's expected forces, complete it
-    local threshold = self.db.pullThreshold or 0.8
-    if pull.totalForces > 0 and self.pullForcesAccum >= pull.totalForces * threshold then
-        pull.completed = true
-        pull.incomplete = nil
-        self.pullForcesAccum = self.pullForcesAccum - pull.totalForces
-        if self.pullForcesAccum < 0 then self.pullForcesAccum = 0 end
-        if self.currentPullIdx < #self.pulls then
-            self.currentPullIdx = self.currentPullIdx + 1
+function H:AdvanceSatisfiedPulls()
+    if not self.db.autoAdvance then return end
+    local threshold = self.db.pullThreshold or 1
+    while true do
+        local pull = self.pulls[self.currentPullIdx]
+        if not pull then return end
+        if not pull.completed then
+            -- Boss/trash combinations require both conditions, in either order.
+            if pull.hasBoss and not pull.bossDefeated then return end
+            -- Empty pulls left by moving mobs are safe to skip. Zero-forces
+            -- enemies still need manual navigation because forces cannot track them.
+            local empty = pull.enemies and #pull.enemies == 0
+            if pull.totalForces <= 0 and not pull.hasBoss and not empty then return end
+            if self.pullForcesAccum < pull.totalForces * threshold then return end
+            pull.completed = true
+            pull.incomplete = nil
+            self.pullForcesAccum = math.max(0, self.pullForcesAccum - pull.totalForces)
         end
+        -- Previously completed pulls must not consume forces a second time.
+        if self.currentPullIdx >= #self.pulls then return end
+        self.currentPullIdx = self.currentPullIdx + 1
     end
 end
 
@@ -1113,14 +1123,20 @@ function H:CheckBossAdvance()
     if not self.db.autoAdvance then return end
     local pull = self.pulls[self.currentPullIdx]
     if not pull then return end
-    if pull.hasBoss then
-        pull.completed = true
-        pull.incomplete = nil
-        self.pullForcesAccum = 0
-        if self.currentPullIdx < #self.pulls then
-            self.currentPullIdx = self.currentPullIdx + 1
-        end
+    if pull.hasBoss and not pull.completed then
+        pull.bossDefeated = true
+        self:AdvanceSatisfiedPulls()
     end
+end
+
+function H:SetAutoAdvance(enabled)
+    if self.db.autoAdvance == enabled then return end
+    self.db.autoAdvance = enabled
+    -- Resuming follows the selected pull from this point onward.
+    self.pullForcesAccum = 0
+    local pull = self.pulls[self.currentPullIdx]
+    if pull then pull.incomplete = nil end
+    if self.UpdateUI then self:UpdateUI() end
 end
 
 ------------------------------------------------------------------------
@@ -1131,7 +1147,7 @@ function H:RunWithCurrentMDTPreset(actionName, callback)
     if preset and type(preset.value) == "table" then return callback(preset) end
 
     if not self:IsModernMDT() then
-        print("|cff00ccffMDTHelper|r: No active MDT preset")
+        print(L["|cff00ccffMDTHelper|r: No active MDT preset"])
         return false
     end
 
@@ -1151,7 +1167,7 @@ function H:RunWithCurrentMDTPreset(actionName, callback)
             C_Timer.After(0.1, PollPreset)
         else
             H._pendingPresetActions[actionName] = nil
-            print("|cff00ccffMDTHelper|r: MDT route data did not finish loading")
+            print(L["|cff00ccffMDTHelper|r: MDT route data did not finish loading"])
         end
     end
     C_Timer.After(0, PollPreset)
@@ -1165,7 +1181,7 @@ end
 function H:ShareRoute()
     local distribution = GetGroupDistribution()
     if not distribution then
-        print("|cff00ccffMDTHelper|r: You must be in a group to share")
+        print(L["|cff00ccffMDTHelper|r: You must be in a group to share"])
         return
     end
 
@@ -1173,23 +1189,23 @@ function H:ShareRoute()
         -- Group membership may have changed while the load-on-demand UI loaded.
         distribution = GetGroupDistribution()
         if not distribution then
-            print("|cff00ccffMDTHelper|r: You must be in a group to share")
+            print(L["|cff00ccffMDTHelper|r: You must be in a group to share"])
             return
         end
         local legacy = GetLegacyMDT()
         if legacy and legacy.SendToGroup then
             local ok = pcall(legacy.SendToGroup, legacy, distribution, false, preset)
             if not ok then
-                print("|cff00ccffMDTHelper|r: Failed to share the MDT route")
+                print(L["|cff00ccffMDTHelper|r: Failed to share the MDT route"])
                 return
             end
-            print("|cff00ccffMDTHelper|r: Route shared to " .. strlower(distribution))
+            print(L["|cff00ccffMDTHelper|r: Route shared to "] .. strlower(distribution))
             return
         end
 
         local api = self:GetMDTAPI()
         if not api or not api.SendCommMessage then
-            print("|cff00ccffMDTHelper|r: MDT communication API is unavailable")
+            print(L["|cff00ccffMDTHelper|r: MDT communication API is unavailable"])
             return
         end
 
@@ -1198,7 +1214,7 @@ function H:ShareRoute()
         if db then preset.difficulty = db.currentDifficulty end
         local export = self:EncodeMDTPreset(preset, false)
         if not export then
-            print("|cff00ccffMDTHelper|r: Failed to encode the MDT route")
+            print(L["|cff00ccffMDTHelper|r: Failed to encode the MDT route"])
             return
         end
 
@@ -1211,13 +1227,13 @@ function H:ShareRoute()
             local ok, name = pcall(api.GetDungeonName, api, preset.value.currentDungeonIdx, true)
             if ok and type(name) == "string" then dungeonName = name end
         end
-        local presetName = preset.text or "Unknown"
+        local presetName = preset.text or L["Unknown"]
         local name, realm = UnitFullName("player")
         realm = realm or GetRealmName():gsub("%s+", "")
         if name then
             name = UnitFullName(name) or name -- preserve unusual character-name casing
         end
-        local chatName = (name or UnitName("player") or "Unknown") .. "+" .. realm
+        local chatName = (name or UnitName("player") or L["Unknown"]) .. "+" .. realm
         local msg = "[MDT_v2: " .. chatName .. " - " .. dungeonName .. ": " .. presetName .. "]"
         local announced = false
         local function OnProgress(_, bytesSent, bytesTotal, didSend)
@@ -1225,12 +1241,12 @@ function H:ShareRoute()
             announced = true
             C_Timer.After(0.5, function()
                 C_ChatInfo.SendChatMessage(msg, distribution)
-                print("|cff00ccffMDTHelper|r: Route shared to " .. strlower(distribution))
+                print(L["|cff00ccffMDTHelper|r: Route shared to "] .. strlower(distribution))
             end)
         end
         local ok = pcall(api.SendCommMessage, api, "MDTPreset", export, distribution, nil, "BULK", OnProgress)
         if not ok then
-            print("|cff00ccffMDTHelper|r: Failed to send the MDT route")
+            print(L["|cff00ccffMDTHelper|r: Failed to send the MDT route"])
         end
     end)
 end
@@ -1242,7 +1258,7 @@ function H:CopyRouteString()
         if db then preset.difficulty = db.currentDifficulty end
         local export = self:EncodeMDTPreset(preset, true)
         if not export then
-            print("|cff00ccffMDTHelper|r: Failed to encode the MDT route")
+            print(L["|cff00ccffMDTHelper|r: Failed to encode the MDT route"])
             return
         end
         self:ShowRouteExport(export)
@@ -1274,7 +1290,7 @@ function H:ShowRouteExport(export)
         title:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
         title:SetPoint("TOPLEFT", 10, -10)
         title:SetTextColor(0, 0.8, 1)
-        title:SetText("MDTHelper - Copy Route String")
+        title:SetText(L["MDTHelper - Copy Route String"])
 
         local closeBtn = CreateFrame("Frame", nil, ef)
         closeBtn:SetSize(16, 16)
@@ -1308,7 +1324,7 @@ function H:ShowRouteExport(export)
         hint:SetFont(STANDARD_TEXT_FONT, 9, "OUTLINE")
         hint:SetPoint("TOPLEFT", 10, -64)
         hint:SetTextColor(0.5, 0.5, 0.5)
-        hint:SetText("Ctrl+C to copy, Esc to close")
+        hint:SetText(L["Ctrl+C to copy, Esc to close"])
 
         ef.editBox = editBox
         H.exportFrame = ef
@@ -1446,13 +1462,13 @@ function H:QueueModernPresetImport(preset, sender)
         if H:ImportModernPreset(pending.preset) then
             H._pendingModernImport = nil
             H._modernImportPolling = nil
-            print("|cff00ccffMDTHelper|r: Auto-imported route from party leader")
+            print(L["|cff00ccffMDTHelper|r: Auto-imported route from party leader"])
         elseif attempts < 100 then
             C_Timer.After(0.1, PollImport)
         else
             H._pendingModernImport = nil
             H._modernImportPolling = nil
-            print("|cff00ccffMDTHelper|r: Could not auto-import the leader's route")
+            print(L["|cff00ccffMDTHelper|r: Could not auto-import the leader's route"])
         end
     end
     C_Timer.After(0, PollImport)
@@ -1471,7 +1487,7 @@ function H:OnMDTPresetReceived(prefix, message, distribution, sender)
         preset.uid = nil
         legacy:ImportPreset(preset)
         self:BuildRoute()
-        print("|cff00ccffMDTHelper|r: Auto-imported route from party leader")
+        print(L["|cff00ccffMDTHelper|r: Auto-imported route from party leader"])
     elseif IsStructurallyValidPreset(preset) then
         self:QueueModernPresetImport(preset, sender)
     end
@@ -1550,6 +1566,7 @@ function H:AdvancePull()
             pull.completed = true; pull.incomplete = nil
         end
         self.currentPullIdx = self.currentPullIdx + 1
+        self.pullForcesAccum = 0
         if self.UpdateUI then self:UpdateUI() end
     end
 end
@@ -1557,8 +1574,13 @@ end
 function H:RetreatPull()
     if self.currentPullIdx > 1 then
         self.currentPullIdx = self.currentPullIdx - 1
+        self.pullForcesAccum = 0
         local pull = self.pulls[self.currentPullIdx]
-        if pull then pull.completed = false end
+        if pull then
+            pull.completed = false
+            pull.incomplete = nil
+            pull.bossDefeated = nil
+        end
         if self.UpdateUI then self:UpdateUI() end
     end
 end
@@ -1581,14 +1603,18 @@ SlashCmdList["MDTHELPER"] = function(msg)
     if cmd == "toggle" or cmd == "" then
         H.db.enabled = not H.db.enabled
         if H.UpdateUI then H:UpdateUI() end
-        print("|cff00ccffMDTHelper|r: " .. (H.db.enabled and "Enabled" or "Disabled"))
+        print("|cff00ccffMDTHelper|r: " .. (H.db.enabled and L["Enabled"] or L["Disabled"]))
     elseif cmd == "lock" then
         H.db.locked = not H.db.locked
-        print("|cff00ccffMDTHelper|r: Frame " .. (H.db.locked and "locked" or "unlocked"))
+        print(L["|cff00ccffMDTHelper|r: Frame "] .. (H.db.locked and L["locked"] or L["unlocked"]))
     elseif cmd == "min" then
         H.db.minimized = not H.db.minimized
         if H.UpdateUI then H:UpdateUI() end
-        print("|cff00ccffMDTHelper|r: " .. (H.db.minimized and "Minimized" or "Expanded"))
+        print("|cff00ccffMDTHelper|r: " .. (H.db.minimized and L["Minimized"] or L["Expanded"]))
+    elseif cmd == "compact" then
+        H.db.compactMode = not H.db.compactMode
+        if H.UpdateUI then H:UpdateUI() end
+        print("|cff00ccffMDTHelper|r: " .. (H.db.compactMode and L["Compact mode enabled"] or L["Compact mode disabled"]))
     elseif cmd == "next" then
         H:AdvancePull()
     elseif cmd == "prev" then
@@ -1596,9 +1622,14 @@ SlashCmdList["MDTHELPER"] = function(msg)
     elseif cmd == "reset" then
         wipe(H.npcKills)
         H.currentPullIdx = 1
-        for _, pull in ipairs(H.pulls) do pull.completed = false end
+        H.pullForcesAccum = 0
+        for _, pull in ipairs(H.pulls) do
+            pull.completed = false
+            pull.incomplete = nil
+            pull.bossDefeated = nil
+        end
         if H.UpdateUI then H:UpdateUI() end
-        print("|cff00ccffMDTHelper|r: Reset pull progress")
+        print(L["|cff00ccffMDTHelper|r: Reset pull progress"])
     elseif cmd == "pos" then
         H.db.framePoint = nil
         H.db.frameHeight = nil
@@ -1611,7 +1642,7 @@ SlashCmdList["MDTHELPER"] = function(msg)
             guide:SetPoint("TOPLEFT", UIParent, "TOPLEFT", UIParent:GetWidth() - 260, -200)
         end
         if H.UpdateUI then H:UpdateUI() end
-        print("|cff00ccffMDTHelper|r: Position and size reset to default")
+        print(L["|cff00ccffMDTHelper|r: Position and size reset to default"])
     elseif cmd == "settings" or cmd == "config" then
         if H.ToggleSettings then H:ToggleSettings() end
     elseif cmd == "share" then
@@ -1622,14 +1653,14 @@ SlashCmdList["MDTHELPER"] = function(msg)
         if H.ToggleMapPopout then H:ToggleMapPopout() end
     elseif cmd == "autoimport" then
         H.db.autoImport = not H.db.autoImport
-        print("|cff00ccffMDTHelper|r: Auto-import leader route " .. (H.db.autoImport and "enabled" or "disabled"))
+        print(L["|cff00ccffMDTHelper|r: Auto-import leader route "] .. (H.db.autoImport and L["enabled"] or L["disabled"]))
     elseif cmd == "status" then
-        print("|cff00ccffMDTHelper|r: " .. (H.db.enabled and "Enabled" or "Disabled"))
-        print("  Active: " .. tostring(H.activeDungeon))
-        print("  Pulls: " .. H:GetCompletedCount() .. "/" .. H:GetPullCount())
-        print("  Current: " .. H.currentPullIdx)
+        print("|cff00ccffMDTHelper|r: " .. (H.db.enabled and L["Enabled"] or L["Disabled"]))
+        print(L["  Active: "] .. tostring(H.activeDungeon))
+        print(L["  Pulls: "] .. H:GetCompletedCount() .. "/" .. H:GetPullCount())
+        print(L["  Current: "] .. H.currentPullIdx)
     else
-        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|next|prev|reset|pos|settings|share|copy|map|autoimport|status]")
+        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|compact|next|prev|reset|pos|settings|share|copy|map|autoimport|status]")
     end
 end
 

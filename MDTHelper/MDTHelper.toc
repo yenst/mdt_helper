@@ -1,8 +1,9 @@
 ## Interface: 120100
 ## Title: MDTHelper
 ## Notes: Live route guide for MDT dungeon routes
+## Notes-zhCN: MDT 地下城路线实时指引
 ## Author: MDTHelper
-## Version: 9.3
+## Version: 9.6
 ## Dependencies: MythicDungeonTools
 ## OptionalDeps: MDT_Legacy
 ## IconTexture: Interface\AddOns\MDTHelper\MDTHelper.tga
@@ -17,9 +18,10 @@
 ## Category-koKR: Mythic+ Dungeons
 ## Category-ptBR: Mythic+ Dungeons
 ## Category-ruRU: Подземелья М+
-## Category-zhCN: Mythic+ Dungeons
+## Category-zhCN: 史诗钥石地下城
 ## Category-zhTW: Mythic+ Dungeons
 
+Locales.lua
 Core.lua
 BundledRoutes.lua
 RouteGuide.lua

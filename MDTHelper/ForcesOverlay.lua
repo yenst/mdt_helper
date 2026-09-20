@@ -1,4 +1,5 @@
 local H = MDTHelper
+local L = H.L
 
 local issecretvalue = issecretvalue or function() return false end
 
@@ -150,9 +151,9 @@ local function InitTooltip()
         local textLeft = _G[tooltip:GetName() .. "TextLeft" .. n]
         if textLeft then
             if issecretvalue(rawPctText) or rawPctText ~= nil then
-                pcall(textLeft.SetFormattedText, textLeft, "|cFF33FF99Forces:|r %s", rawPctText)
+                pcall(textLeft.SetFormattedText, textLeft, L["|cFF33FF99Forces:|r %s"], rawPctText)
             else
-                pcall(textLeft.SetFormattedText, textLeft, "|cFF33FF99Forces:|r %.2f%%", rawPct)
+                pcall(textLeft.SetFormattedText, textLeft, L["|cFF33FF99Forces:|r %.2f%%"], rawPct)
             end
             tooltip:Show()
         end
