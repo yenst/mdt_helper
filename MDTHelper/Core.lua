@@ -446,7 +446,7 @@ H.totalForcesRequired = 0
 H.activeDungeon = false
 H.completedCriteria = {}
 H.keyCompleted = false
-H.db = { enabled = true, locked = false, minimized = false, compactMode = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 1, mapEditPulls = true }
+H.db = { enabled = true, locked = false, minimized = false, compactMode = false, mapOnly = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 1, mapEditPulls = true }
 H.inCombat = false
 H.combatForcesSnapshot = 0
 H.livePullPercent = 0
@@ -465,6 +465,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.locked == nil then MDTHelperDB.locked = false end
         if MDTHelperDB.minimized == nil then MDTHelperDB.minimized = false end
         if MDTHelperDB.compactMode == nil then MDTHelperDB.compactMode = false end
+        if MDTHelperDB.mapOnly == nil then MDTHelperDB.mapOnly = false end
         if MDTHelperDB.bgAlpha == nil then MDTHelperDB.bgAlpha = 1 end
         if MDTHelperDB.autoImport == nil then MDTHelperDB.autoImport = true end
         if MDTHelperDB.autoAdvance == nil then MDTHelperDB.autoAdvance = true end
@@ -708,13 +709,16 @@ end
 ------------------------------------------------------------------------
 function H:CheckInstance()
     local _, instanceType, _, _, _, _, _, instanceID = GetInstanceInfo()
-    if instanceType == "party" then
+    -- Garrisons can report "party" while IsInInstance() is false.
+    if IsInInstance() and instanceType == "party" then
         local newInstance = self._lastInstanceID ~= instanceID
         self._lastInstanceID = instanceID
         self.activeDungeon = true
-        self.db.mapPopout = true
+        -- A zone notification within the same dungeon must not reopen a map
+        -- the player closed or reset their pull progress.
+        if newInstance and self.db.enabled then self.db.mapPopout = true end
         if self:SyncMDTDungeon(newInstance) ~= false then
-            self:BuildRoute()
+            if newInstance or #self.pulls == 0 then self:BuildRoute() end
         elseif newInstance then
             -- Do not display the previous dungeon while MDT redraws this one.
             wipe(self.pulls)
@@ -1742,6 +1746,18 @@ end
 ------------------------------------------------------------------------
 -- Slash commands
 ------------------------------------------------------------------------
+function H:SetMapOnly(enabled)
+    self.db.mapOnly = enabled
+    if enabled then
+        self.db.mapPopout = true
+        if #self.pulls == 0 then
+            self:SyncMDTDungeon()
+            self:BuildRoute()
+        end
+    end
+    if self.UpdateUI then self:UpdateUI() end
+end
+
 SLASH_MDTHELPER1 = "/mdthelper"
 SLASH_MDTHELPER2 = "/mdth"
 SlashCmdList["MDTHELPER"] = function(msg)
@@ -1797,6 +1813,9 @@ SlashCmdList["MDTHELPER"] = function(msg)
         H:CopyRouteString()
     elseif cmd == "map" then
         if H.ToggleMapPopout then H:ToggleMapPopout() end
+    elseif cmd == "maponly" then
+        H:SetMapOnly(not H.db.mapOnly)
+        print("|cff00ccffMDTHelper|r: " .. (H.db.mapOnly and L["Map only enabled"] or L["Map only disabled"]))
     elseif cmd == "autoimport" then
         H.db.autoImport = not H.db.autoImport
         print(L["|cff00ccffMDTHelper|r: Auto-import leader route "] .. (H.db.autoImport and L["enabled"] or L["disabled"]))
@@ -1806,7 +1825,7 @@ SlashCmdList["MDTHELPER"] = function(msg)
         print(L["  Pulls: "] .. H:GetCompletedCount() .. "/" .. H:GetPullCount())
         print(L["  Current: "] .. H.currentPullIdx)
     else
-        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|compact|next|prev|reset|pos|settings|share|copy|map|autoimport|status]")
+        print("|cff00ccffMDTHelper|r: /mdth [toggle|lock|min|compact|next|prev|reset|pos|settings|share|copy|map|maponly|autoimport|status]")
     end
 end
 

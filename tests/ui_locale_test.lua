@@ -92,6 +92,17 @@ for _, locale in ipairs({ 'enUS', 'zhCN', 'deDE' }) do
         assert(tokens(key, '|c%x%x%x%x%x%x%x%x') == tokens(value, '|c%x%x%x%x%x%x%x%x'), key)
     end
     H:_DoUpdateUI()
+    local plannedPercent = findText('33.3%')
+    H.totalForcesGained = 30
+    H.livePullPercent = 5
+    H:UpdatePullForcesDisplay()
+    assert(plannedPercent.text == '33.3%', 'combat must preserve the planned pull target')
+    findText('30/300  10%  |cFFFFCC00+5.0%|r')
+    H:_DoUpdateUI()
+    assert(plannedPercent.text == '33.3%', 'full refresh must also preserve the target in combat')
+    H.livePullPercent = 0
+    H:_DoUpdateUI()
+    assert(plannedPercent.text == '33.3%', 'planned target must remain visible after combat')
     local expandedHeight = MDTHelperGuide:GetHeight()
     local mobName = findText('Enemy A')
     assert(mobName:IsVisible())
@@ -112,5 +123,50 @@ for _, locale in ipairs({ 'enUS', 'zhCN', 'deDE' }) do
     checkbox.checked = false
     checkbox.scripts.OnClick(checkbox)
     assert(not H.db.compactMode and mobName:IsVisible())
+    _G.hooksecurefunc = function(object, method, hook)
+        local original = object[method]
+        object[method] = function(...)
+            original(...)
+            hook(...)
+        end
+    end
+    assert(loadfile('MDTHelper/MapPopout.lua'))('MDTHelper', H)
+    local mapOnlyCheckbox = findText(H.L['Map Only']).parent
+    assert(H.db.mapOnly == false, 'map-only mode must be opt-in')
+    -- Keep the real visibility hook; isolate map rendering from these layout tests.
+    -- Map rendering expects MDT textures and scroll geometry supplied by the game.
+    H.dungeonIdx = nil
+    local mapShow = MDTHelperMapPopout.Show
+    local showCount = 0
+    MDTHelperMapPopout.Show = function(self)
+        showCount = showCount + 1
+        mapShow(self)
+    end
+    mapOnlyCheckbox.checked = true
+    mapOnlyCheckbox.scripts.OnClick(mapOnlyCheckbox)
+    assert(H.db.mapOnly and H.db.mapPopout and not MDTHelperGuide:IsShown())
+    assert(showCount > 0, 'map-only mode must open the map through the UI hook')
+    local currentPull = H.currentPullIdx
+    H:AdvancePull()
+    assert(H.currentPullIdx == currentPull + 1 and not MDTHelperGuide:IsShown(),
+        'navigation must continue with the guide hidden')
+    _G.strlower = string.lower
+    _G.strtrim = function(value) return value:match('^%s*(.-)%s*$') end
+    SlashCmdList.MDTHELPER('maponly')
+    assert(not H.db.mapOnly and MDTHelperGuide:IsShown(), 'command must restore the guide')
+    SlashCmdList.MDTHELPER('maponly')
+    assert(H.db.mapOnly and not MDTHelperGuide:IsShown(), 'command must hide the guide')
+    mapOnlyCheckbox.checked = false
+    mapOnlyCheckbox.scripts.OnClick(mapOnlyCheckbox)
+    assert(not H.db.mapOnly and MDTHelperGuide:IsShown(), 'settings must restore the guide')
+    H.db.mapPopout = true
+    H.dungeonIdx = 1
+    MDTHelperMapPopout:Show()
+    H.db.enabled = false
+    H:_DoUpdateUI()
+    assert(not MDTHelperGuide:IsShown() and not MDTHelperMapPopout:IsShown(),
+        'disabling the addon must hide both the guide and the map')
+    H:_DoUpdateUI()
+    assert(not MDTHelperMapPopout:IsShown(), 'refresh must not reopen a disabled map')
     print('PASS layout, settings toggle, advancement, and localization: ' .. locale)
 end

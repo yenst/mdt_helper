@@ -14,6 +14,7 @@ A forces progress bar at the top tracks your overall enemy forces completion.
 - **Auto-advance** — defaults to 100% of each pull's expected forces; boss pulls also require a boss kill. Adjust **Pull Accuracy** for a margin of error, or disable auto-advance via the header button or settings when going off route and navigate manually. Existing saved accuracy settings are preserved.
 - **Expanded current pull** — the active pull shows detailed mob info with NPC portraits
 - **Compact mode** — keep the current pull collapsed to a highlighted portrait row via **Compact Mode** in settings or `/mdth compact`; also works in minimized mode
+- **Map only** — show the map without the pull list via **Map Only** in settings or `/mdth maponly`. The preference is saved and pull tracking continues in the background. Toggle it off to restore the pull list; `/mdth map` opens or closes the map window.
 - **Compact pull list** — other pulls show stacked portraits with clone counts
 - **Forces bar** — real-time forces progress shown as count and percentage
 - **Minimized mode** — collapse to show only the current and next pull; toggle with the `-`/`+` header button or `/mdth min`
@@ -44,6 +45,8 @@ Auto-advance carries excess forces across combined pulls, skips empty and alread
 | `/mdth reset` | Reset all pull progress |
 | `/mdth pos` | Reset position and size to defaults |
 | `/mdth settings` | Open the settings panel |
+| `/mdth map` | Open / close the map window |
+| `/mdth maponly` | Toggle map-only mode (hide / restore the pull list) |
 | `/mdth share` | Share current route to group |
 | `/mdth copy` | Copy route export string |
 | `/mdth autoimport` | Toggle auto-import of leader routes |
@@ -70,7 +73,11 @@ Make sure MDT is also installed, then `/reload` or restart the game client.
 
 ## Compatibility tests
 
-Run `lua tests/mdt_compat_test.lua`, `lua tests/auto_advance_test.lua`, and `lua tests/ui_locale_test.lua` from the repository root. These tests mock WoW APIs and cover modern and legacy route actions, delayed loading, leader checks, import preservation, preset changes, mob-edit refreshes, forces tracking, boss/trash completion, manual navigation, compact layouts, and locale fallback. Verify sharing a large route between two clients, copying/importing an export, changing/editing presets, and auto-advancing through trash and boss pulls in-game before publishing a release. Check compact mode and Chinese text rendering in-game as well; mocked frames do not measure glyph widths.
+Run `lua5.1 tests/mdt_compat_test.lua`, `lua5.1 tests/auto_advance_test.lua`, and `lua5.1 tests/ui_locale_test.lua` from the repository root. These tests mock WoW APIs and cover modern and legacy route actions, delayed loading, leader checks, import preservation, preset changes, mob-edit refreshes, forces tracking, boss/trash completion, manual navigation, compact layouts, locale fallback, combat percentage labels, garrison exclusion, and preserving map visibility and progress across repeated zone events. Verify sharing a large route between two clients, copying/importing an export, changing/editing presets, and auto-advancing through trash and boss pulls in-game before publishing a release. Check compact mode, Chinese text rendering, the planned pull percentage during combat, and hearthing to/flying out of a garrison in-game as well; mocked frames do not measure glyph widths or reproduce live zone transitions.
+
+## Release packaging
+
+Update `## Version:` in `MDTHelper/MDTHelper.toc`, then run `python3 scripts/package_release.py`. It builds `MDTHelper.<version>.zip` from this repository's addon folder and runs the Lua 5.1 checks against the extracted archive before saving the release. Upload that exact ZIP; packaging from an installed game folder can ship stale code. Existing release archives are never overwritten.
 
 ## Translation review
 

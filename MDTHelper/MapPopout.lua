@@ -1485,10 +1485,10 @@ hooksecurefunc(H, "_DoUpdateUI", function()
     -- this deferred refresh re-renders in place instead of re-centering the camera.
     local skipZoom = H._editingPull
     H._editingPull = nil
-    if H.db.mapPopout and H.pulls and #H.pulls > 0 then
+    if H.db.enabled and H.db.mapPopout and H.pulls and #H.pulls > 0 then
         if not mf:IsShown() then mf:Show() end
         UpdateMapPopout(skipZoom)
-    elseif mf:IsShown() and (not H.db.mapPopout or not H.pulls or #H.pulls == 0) then
+    elseif mf:IsShown() then
         mf:Hide()
     end
 end)

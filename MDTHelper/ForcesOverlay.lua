@@ -141,14 +141,21 @@ end
 ------------------------------------------------------------------------
 local function InitTooltip()
     if not TooltipDataProcessor or not TooltipDataProcessor.AddTooltipPostCall then return end
+    local nativeLineType = Enum.TooltipDataLineType and Enum.TooltipDataLineType.UnitCriteriaProgress
     TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, function(tooltip)
         if not H.db or not H.db.forcesTooltip then return end
         if not H.activeDungeon then return end
+        -- Since 12.1.5 Blizzard adds its own enemy forces line; don't duplicate it.
+        if nativeLineType then return end
+        -- Only decorate the mouseover tooltip; other addons' tooltips may be unnamed.
+        if tooltip ~= GameTooltip then return end
+        local tooltipName = tooltip:GetName()
+        if not tooltipName then return end
         local _, rawPct, rawPctText = GetRawForces("mouseover")
         if not issecretvalue(rawPct) and rawPct == nil then return end
         tooltip:AddLine(" ")
         local n = tooltip:NumLines()
-        local textLeft = _G[tooltip:GetName() .. "TextLeft" .. n]
+        local textLeft = _G[tooltipName .. "TextLeft" .. n]
         if textLeft then
             if issecretvalue(rawPctText) or rawPctText ~= nil then
                 pcall(textLeft.SetFormattedText, textLeft, L["|cFF33FF99Forces:|r %s"], rawPctText)

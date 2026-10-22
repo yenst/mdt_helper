@@ -243,6 +243,11 @@ MakeCheckbox(L["Compact Mode"],
     end,
     L["Keep the current pull collapsed to a single row. Also works in minimized mode."])
 
+MakeCheckbox(L["Map Only"],
+    function() return H.db.mapOnly end,
+    function(v) H:SetMapOnly(v) end,
+    L["Show only the dungeon map window. Pull tracking continues in the background."])
+
 ------------------------------------------------------------------------
 -- Sliders
 ------------------------------------------------------------------------

@@ -788,7 +788,7 @@ function H:_DoUpdateUI()
         self._positionRestored = true
     end
 
-    if not self.db or not self.db.enabled or not self.activeDungeon or #self.pulls == 0 then
+    if not self.db or not self.db.enabled or self.db.mapOnly or not self.activeDungeon or #self.pulls == 0 then
         f:Hide()
         return
     end
@@ -1119,10 +1119,7 @@ function H:UpdatePullForcesDisplay()
         barText:SetText(base .. "  |cFFFFCC00+" .. string.format("%.1f%%", self.livePullPercent) .. "|r")
     end
 
-    -- Show predicted total on the expanded block
-    if expandedCumPct:IsShown() then
-        local currentPct = needed > 0 and (gained / needed * 100) or 0
-        local predicted = currentPct + self.livePullPercent
-        expandedCumPct:SetText(string.format("|cFFFFCC00\xe2\x86\x92%.1f%%|r", predicted))
-    end
+    -- Keep the expanded row's planned cumulative percentage visible in combat.
+    -- livePullPercent is already-earned forces (included in gained), not a
+    -- prediction of the forces from enemies that are still alive.
 end

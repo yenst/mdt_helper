@@ -18,6 +18,7 @@ That's it. No setup required — it just works out of the box.
 - **Completed pulls** get checked off and dimmed so you always know where you are.
 - **Minimized mode** — collapse to just the current and next pull when you want a smaller footprint.
 - **Compact mode** — keep the current pull collapsed to a highlighted portrait row, including in minimized mode.
+- **Map only** — show the dungeon map without the pull list while pull tracking continues in the background.
 
 ## Auto-Advance
 
@@ -40,6 +41,7 @@ Open the settings panel with **/mdth settings**:
 - **Lock / Unlock** — when unlocked, drag the frame to move it and drag the bottom edge to resize the height of the scroll area. Lock it when you're happy with the layout.
 - **Auto-import toggle** — enable or disable automatic route imports from your party leader.
 - **Compact Mode** — keep the current pull collapsed instead of expanding its mob details.
+- **Map Only** — hide the pull list and open the map window. Your preference is saved between sessions.
 - **Reset Position & Size** — snap the overlay back to its default location and size.
 
 You can also bind **Next Pull** and **Previous Pull** in WoW's Key Bindings menu (look under "MDT Helper").
@@ -52,6 +54,8 @@ Type these in chat:
 - **/mdth lock** — lock the frame in place so you don't accidentally drag or resize it
 - **/mdth min** — toggle minimized mode
 - **/mdth compact** — toggle compact mode
+- **/mdth map** — open or close the map window
+- **/mdth maponly** — toggle map-only mode; toggle off to restore the pull list
 - **/mdth next** — manually advance to the next pull
 - **/mdth prev** — go back one pull
 - **/mdth reset** — start the tracker over from pull 1
@@ -82,4 +86,4 @@ No. The overlay is lightweight and only updates when forces change or you switch
 Auto-advance follows forces gained, so extra off-route kills can count toward the current pull. If you depart from the route, disable auto-advance and use the manual next/prev buttons. To resume automatic tracking, select the pull you are about to start and enable auto-advance; forces tracking starts fresh for that selection.
 
 **Does it do anything outside of dungeons?**
-No. The overlay automatically hides when you're not in a dungeon instance.
+The pull list automatically hides outside dungeon instances. You can open the selected MDT route's map with `/mdth map` or enable map-only mode with `/mdth maponly`.

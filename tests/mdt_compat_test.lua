@@ -169,6 +169,67 @@ local function test(name, run)
     realPrint("PASS " .. name)
 end
 
+local function setInstance(inInstance, instanceType, instanceID)
+    _G.IsInInstance = function() return inInstance, instanceType end
+    _G.GetInstanceInfo = function()
+        return "Localized Dungeon", instanceType, 0, "", 5, 0, false, instanceID
+    end
+end
+
+test("garrison party type never activates a dungeon or loads a route", function()
+    local s, H = setup()
+    H.activeDungeon = true
+    H.db.mapPopout = true
+    H.pulls = { { totalForces = 100 } }
+    H._modernMDTLoading = true
+    setInstance(false, "party", 1159)
+    H:CheckInstance()
+    assert(not H.activeDungeon and not H.db.mapPopout and #H.pulls == 0)
+    assert(not H._modernMDTLoading and not s.loadRequests and s.rebuilds == 0)
+    H.db.enabled = false
+    H:CheckInstance() -- another notification while leaving the garrison
+    setInstance(false, "none", 1116)
+    H:CheckInstance()
+    assert(not H.db.enabled and not H.db.mapPopout and not H.activeDungeon)
+    assert(not s.loadRequests and s.rebuilds == 0)
+end)
+
+test("dungeon entry opens the map once and repeated events preserve progress", function()
+    local s, H = setup()
+    setInstance(true, "party", 1234)
+    H:CheckInstance()
+    assert(H.activeDungeon and H.db.mapPopout and s.rebuilds == 1)
+    H.pulls = { { totalForces = 100, completed = true }, { totalForces = 100 } }
+    H.currentPullIdx, H.totalForcesGained, H.pullForcesAccum = 2, 120, 20
+    H.db.mapPopout = false
+    H:CheckInstance()
+    assert(not H.db.mapPopout and s.rebuilds == 1)
+    assert(H.currentPullIdx == 2 and H.totalForcesGained == 120 and H.pullForcesAccum == 20)
+    setInstance(true, "party", 5678)
+    H:CheckInstance()
+    assert(H.db.mapPopout and s.rebuilds == 2)
+    setInstance(false, "none", 1116)
+    H:CheckInstance()
+    assert(not H.activeDungeon and not H.db.mapPopout and #H.pulls == 0)
+end)
+
+test("disabled addon stays disabled on dungeon entry", function()
+    local s, H = setup()
+    H.db.enabled, H.db.mapPopout = false, false
+    setInstance(true, "party", 1234)
+    H:CheckInstance()
+    assert(not H.db.enabled and not H.db.mapPopout)
+end)
+
+test("raid and scenario instances do not activate the dungeon guide", function()
+    for _, instanceType in ipairs({ "raid", "scenario" }) do
+        local s, H = setup()
+        setInstance(true, instanceType, 1234)
+        H:CheckInstance()
+        assert(not H.activeDungeon and not H.db.mapPopout and s.rebuilds == 0)
+    end
+end)
+
 test("modern share works without the removed MDT global", function()
     local s, H = setup()
     H:ShareRoute()
