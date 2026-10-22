@@ -133,6 +133,32 @@ local function setup()
         _G.MDTFrame = { sidePanel = { WidgetGroup = { PresetDropDown = dropdown } } }
         return dropdown
     end
+    -- MDT 6.3.10+ side panel: kit controls nested under the panel, found by id.
+    function state:kit(pullItems, blips)
+        local function control(props)
+            return {
+                kitProps = props,
+                Emit = function(control, name, ...) return control.kitProps[name](...) end,
+                GetChildren = function() end,
+            }
+        end
+        local routes = control({ id = "routes", onActivate = function(item)
+            self.db.currentPreset[self.db.currentDungeonIdx] = item.idx
+            self.activated = item.idx
+        end })
+        local search = control({ id = "routeSearch", value = "", onChange = function(text)
+            self.routeRefreshes = (self.routeRefreshes or 0) + 1
+            self.routeQuery = text
+        end })
+        search.GetValue = function(control) return control.kitProps.value end
+        local pulls = control({ id = "pulls", items = pullItems or {} })
+        local stack = { GetChildren = function() return search, routes, pulls end }
+        _G.MDTFrame = {
+            sidePanel = { GetChildren = function() return stack end },
+            mapPanelFrame = { GetChildren = function() return unpack(blips or {}) end },
+        }
+        return routes, pulls
+    end
     return state, H
 end
 
@@ -318,11 +344,92 @@ end)
 test("preset hook attaches after the modern UI initializes", function()
     local s, H = setup()
     H:HookMDTComm()
-    assert(s.initializer and not H._modernPresetDropdownHooked)
+    assert(s.initializer and not H._modernPresetChangesHooked)
     s.initializer()
     s:dropdown()
     s:flush()
-    assert(H._modernPresetDropdownHooked)
+    assert(H._modernPresetChangesHooked)
+end)
+
+test("MDT 6.3.10 route changes use the public route callback", function()
+    local s, H = setup()
+    local callbacks = {}
+    MythicDungeonToolsAPI.RegisterRouteChangedCallback = function(_, callback) callbacks[#callbacks + 1] = callback end
+    H.db = { mapPopout = true }
+    assert(H:HookModernPresetChanges() and H:HookModernPresetChanges())
+    assert(#callbacks == 1)
+    s.db.presets[1][3] = s.db.presets[1][2]
+    s.db.presets[1][2] = preset("Other")
+    s.db.currentPreset[1] = 2
+    callbacks[1](1, 2)
+    s:flush()
+    assert(s.rebuilds == 1)
+    callbacks[1](1, 2)
+    s:flush()
+    assert(s.rebuilds == 1)
+end)
+
+test("MDT 6.3.10 auto-import selects through the route list", function()
+    local s, H = setup()
+    s:kit()
+    H.db = { autoImport = true }
+    assert(H:ImportModernPreset(preset("Leader Route")))
+    assert(#s.db.presets[1] == 3 and s.db.presets[1][2].text == "Leader Route")
+    assert(s.db.presets[1][3].value == 0)
+    assert(s.activated == 2 and s.db.currentPreset[1] == 2)
+    assert(s.routeRefreshes == 1 and s.routeQuery == "")
+end)
+
+test("MDT 6.3.10 mob edits redraw through the route list", function()
+    local s, H = setup()
+    s:kit()
+    H.pulls = { { completed = true, incomplete = false } }
+    H.RebuildPullData = function()
+        assert(s.activated == 1)
+        H.pulls = { { completed = false } }
+        s.editedRebuild = true
+    end
+    H:TogglePullMob(1, 2, true)
+    assert(not s.editedRebuild, "modern pull data must redraw first")
+    s:flush()
+    assert(s.editedRebuild and H.pulls[1].completed == true)
+end)
+
+test("MDT 6.3.10 pull data comes from the kit pull list and map", function()
+    local s, H = setup()
+    local route = preset()
+    route.value.pulls = {
+        { [1] = { 1, 2 }, [2] = { 1 }, color = "ff0000" },
+        { [3] = { 1 } },
+    }
+    s.db.presets[1][1] = route
+    local skitter = { id = 101, name = "Skitter", count = 4, displayId = 11, scale = 1,
+        clones = { { x = 1, y = 2, sublevel = 1 }, { x = 3, y = 4, sublevel = 1, count = 6 } } }
+    local brute = { id = 102, name = "Brute", count = 10, isBoss = false, scale = 1,
+        clones = { { x = 5, y = 6, sublevel = 1 } } }
+    local function blip(enemyIdx, cloneIdx, data)
+        return { enemyIdx = enemyIdx, cloneIdx = cloneIdx, data = data, clone = data.clones[cloneIdx],
+            IsShown = function() return true end }
+    end
+    s:kit({
+        { kind = "pull", index = 1, color = { 1, 0, 0 },
+            portraits = { { enemyIdx = 2, npcId = 102, name = "Brute", count = 10, quantity = 1 } } },
+        -- Enemy 3 is on another floor: only its pull portrait knows it.
+        { kind = "pull", index = 2, color = { 0, 1, 0 },
+            portraits = { { enemyIdx = 3, npcId = 103, name = "Boss", count = 0, quantity = 1, isBoss = true } } },
+        { kind = "newPull", key = "new" },
+    }, { blip(1, 1, skitter), blip(1, 2, skitter), blip(2, 1, brute) })
+    MythicDungeonToolsAPI.GetEnemyForces = function(_, npcId) return 4, 200 end
+
+    assert(H:RebuildModernPullData())
+    assert(#H.pulls == 2)
+    local first = H.pulls[1]
+    assert(first.totalForces == 4 + 6 + 10, first.totalForces)
+    assert(#first.enemies == 3 and #first.clonePositions == 3)
+    assert(first.color[1] == 1 and first.color[2] == 0)
+    assert(H.pulls[2].hasBoss and H.pulls[2].enemies[1].npcId == 103)
+    assert(H.totalForcesRequired == 200)
+    assert(H.npcIdToEnemyInfo[102].forces == 10)
 end)
 
 test("modern mob edits redraw MDT before rebuilding and preserve progress", function()

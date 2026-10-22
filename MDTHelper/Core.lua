@@ -44,6 +44,79 @@ function H:IsModernMDT()
     return not GetLegacyMDT() and rawget(_G, "MythicDungeonToolsAPI") ~= nil
 end
 
+-- MDT 6.3.10 replaced its AceGUI side panel (PresetDropDown, newPullButtons)
+-- with its own UI kit. Kit controls are frames that keep their spec, including
+-- a stable `id` and the player callbacks, in `kitProps`.
+local function FindKitControl(parent, id, depth)
+    if not parent or not parent.GetChildren or depth > 8 then return nil end
+    for _, child in ipairs({ parent:GetChildren() }) do
+        local props = child.kitProps
+        if type(props) == "table" and props.id == id then return child end
+        local found = FindKitControl(child, id, depth + 1)
+        if found then return found end
+    end
+    return nil
+end
+
+function H:GetModernKitControl(id)
+    local frame = rawget(_G, "MDTFrame")
+    if not frame or not frame.sidePanel then return nil end
+    return FindKitControl(frame.sidePanel, id, 1)
+end
+
+-- MDT 6.2 to 6.3.9 only.
+local function GetModernPresetDropdown()
+    local frame = rawget(_G, "MDTFrame")
+    local group = frame and frame.sidePanel and frame.sidePanel.WidgetGroup
+    return group and group.PresetDropDown
+end
+
+function H:CanSelectModernPreset()
+    local routes = self:GetModernKitControl("routes")
+    if routes and routes.Emit then return true end
+    local dropdown = GetModernPresetDropdown()
+    return dropdown ~= nil and dropdown.Fire ~= nil
+end
+
+-- Select (or re-select, to redraw) a preset of MDT's current dungeon through
+-- the callback a player click uses. MDT then redraws its map and pull list.
+function H:SelectModernPreset(presetIdx)
+    local routes = self:GetModernKitControl("routes")
+    if routes and routes.Emit then
+        routes:Emit("onActivate", { idx = presetIdx }, presetIdx)
+        return true
+    end
+    local dropdown = GetModernPresetDropdown()
+    if not dropdown or not dropdown.Fire then return false end
+    if dropdown.SetValue then dropdown:SetValue(presetIdx) end
+    dropdown:Fire("OnValueChanged", presetIdx)
+    return true
+end
+
+-- Show presets added to MDT's DB in its route list without changing the
+-- selection or redrawing the route.
+function H:RefreshModernPresetList()
+    local search = self:GetModernKitControl("routeSearch")
+    if search and search.Emit then
+        -- The search box's change callback rebuilds the route list from the DB.
+        search:Emit("onChange", search.GetValue and search:GetValue() or "", search)
+        return
+    end
+
+    local legacy = GetLegacyMDT()
+    local frame = rawget(_G, "MDTFrame") or (legacy and legacy.main_frame)
+    local group = frame and frame.sidePanel and frame.sidePanel.WidgetGroup
+    local dropdown = group and group.PresetDropDown
+    local db = self:GetMDTDB()
+    local presets = db and db.presets and db.presets[db.currentDungeonIdx]
+    if not dropdown or not presets then return end
+    local labels = {}
+    for idx, preset in pairs(presets) do labels[idx] = preset.text end
+    if dropdown.SetList then dropdown:SetList(labels) end
+    -- Updating the labels must not fire a selection callback or reset a run.
+    if dropdown.SetValue then dropdown:SetValue(db.currentPreset[db.currentDungeonIdx]) end
+end
+
 local MDT2_PREFIX = "!~MDT2~"
 local UID_CHARACTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()"
 
@@ -166,9 +239,20 @@ function H:GetModernInstanceDungeonIdx()
     return nil
 end
 
+-- MDT 6.3.10+ keeps a summary of every pull, including rows scrolled out of
+-- view, on its kit pull list. Each portrait carries the enemy's MDT data.
+local function GetModernPullItems()
+    local list = H:GetModernKitControl("pulls")
+    local items = list and list.kitProps.items
+    return type(items) == "table" and items or nil
+end
+
 local function ModernRouteFrameReady(expectedDungeonIdx)
     local frame = rawget(_G, "MDTFrame")
-    if not frame or not frame.sidePanel or not frame.sidePanel.newPullButtons then return false end
+    if not frame or not frame.sidePanel then return false end
+    local pullItems = GetModernPullItems()
+    local pullButtons = frame.sidePanel.newPullButtons
+    if not pullItems and not pullButtons then return false end
 
     local db = H:GetMDTDB()
     local preset = H:GetCurrentMDTPreset()
@@ -184,9 +268,13 @@ local function ModernRouteFrameReady(expectedDungeonIdx)
                 break
             end
         end
-        local button = frame.sidePanel.newPullButtons[pullIdx]
-        if hasEnemies and (not button or not button.enemyPortraits) then return false end
-        if hasEnemies then
+        if pullItems then
+            local item = pullItems[pullIdx]
+            if not item or item.kind ~= "pull" then return false end
+            if hasEnemies and (type(item.portraits) ~= "table" or not item.portraits[1]) then return false end
+        elseif hasEnemies then
+            local button = pullButtons[pullIdx]
+            if not button or not button.enemyPortraits then return false end
             local hasPortraitData = false
             for _, portrait in pairs(button.enemyPortraits) do
                 if portrait.enemyData and (not portrait.IsShown or portrait:IsShown()) then
@@ -681,8 +769,9 @@ function H:RebuildModernPullData()
     if not api or not db or not preset or not frame then return false end
 
     local rawPulls = preset.value and preset.value.pulls
+    local pullItems = GetModernPullItems()
     local pullButtons = frame.sidePanel and frame.sidePanel.newPullButtons
-    if not rawPulls or not pullButtons then return false end
+    if not rawPulls or (not pullItems and not pullButtons) then return false end
 
     wipe(self.pulls)
     wipe(self.npcIdToEnemyInfo)
@@ -726,35 +815,92 @@ function H:RebuildModernPullData()
         end
     end
 
+    -- MDT 6.3.10+ pull list portraits name enemies on other floors that have
+    -- no map button. They are capped per pull, so prefer the map's full data.
+    local portraitEnemies = {}
+    if pullItems then
+        for _, item in ipairs(pullItems) do
+            if item.kind == "pull" and type(item.portraits) == "table" then
+                for _, portrait in ipairs(item.portraits) do
+                    if portrait.enemyIdx and portrait.npcId and not portraitEnemies[portrait.enemyIdx] then
+                        portraitEnemies[portrait.enemyIdx] = {
+                            id = portrait.npcId,
+                            name = portrait.name,
+                            count = portrait.count,
+                            isBoss = portrait.isBoss,
+                            displayId = portrait.displayId,
+                        }
+                    end
+                end
+            end
+        end
+    end
+
+    local function AddEnemy(pullData, info)
+        pullData.totalForces = pullData.totalForces + info.forces * info.numClones
+        pullData.enemies[#pullData.enemies + 1] = info
+        self.npcIdToEnemyInfo[info.npcId] = { name = info.name, forces = info.forces }
+
+        if self.totalForcesRequired == 0 and api.GetEnemyForces then
+            local ok, _, total = pcall(api.GetEnemyForces, api, info.npcId)
+            if ok and type(total) == "number" then self.totalForcesRequired = total end
+        end
+    end
+
     for pullIdx, rawPull in ipairs(rawPulls) do
-        local button = pullButtons[pullIdx]
+        local item = pullItems and pullItems[pullIdx]
+        local button = pullButtons and pullButtons[pullIdx]
         local pullData = { enemies = {}, clonePositions = {}, totalForces = 0, color = nil, completed = false }
-        if button and button.color then
+        if item and type(item.color) == "table" then
+            pullData.color = { item.color[1], item.color[2], item.color[3] }
+        elseif button and button.color then
             pullData.color = { button.color.r or button.color[1], button.color.g or button.color[2], button.color.b or button.color[3] }
         elseif rawPull.color then
             pullData.color = { rawPull.color[1], rawPull.color[2], rawPull.color[3] }
         end
 
-        if button and button.enemyPortraits then
+        if pullItems then
+            -- Group clones like MDT's portraits: one entry per enemy and forces value.
+            local grouped = {}
+            for enemyIdx, clones in pairs(rawPull) do
+                local enemyData = enemyIdx ~= "color" and type(clones) == "table"
+                    and (self.mdtEnemies[enemyIdx] or portraitEnemies[enemyIdx])
+                if enemyData and enemyData.id then
+                    for _, cloneIdx in pairs(clones) do
+                        local cloneData = enemyData.clones and enemyData.clones[cloneIdx]
+                        if cloneData or not enemyData.clones then
+                            local forces = cloneData and cloneData.count or enemyData.count or 0
+                            local key = enemyData.id .. ":" .. forces
+                            local info = grouped[key]
+                            if not info then
+                                info = {
+                                    npcId = enemyData.id,
+                                    name = LocalName(enemyData.name),
+                                    forces = forces,
+                                    numClones = 0,
+                                    isBoss = enemyData.isBoss or false,
+                                    displayId = enemyData.displayId,
+                                }
+                                grouped[key] = info
+                            end
+                            info.numClones = info.numClones + 1
+                        end
+                    end
+                end
+            end
+            for _, info in pairs(grouped) do AddEnemy(pullData, info) end
+        elseif button and button.enemyPortraits then
             for _, portrait in pairs(button.enemyPortraits) do
                 local data = portrait.enemyData
                 if data and data.npcId and (not portrait.IsShown or portrait:IsShown()) then
-                    local info = {
+                    AddEnemy(pullData, {
                         npcId = data.npcId,
                         name = LocalName(data.name),
                         forces = data.count or 0,
                         numClones = data.quantity or 0,
                         isBoss = data.isBoss or false,
                         displayId = data.displayId,
-                    }
-                    pullData.totalForces = pullData.totalForces + info.forces * info.numClones
-                    pullData.enemies[#pullData.enemies + 1] = info
-                    self.npcIdToEnemyInfo[info.npcId] = { name = info.name, forces = info.forces }
-
-                    if self.totalForcesRequired == 0 and api.GetEnemyForces then
-                        local ok, _, total = pcall(api.GetEnemyForces, api, info.npcId)
-                        if ok and type(total) == "number" then self.totalForcesRequired = total end
-                    end
+                    })
                 end
             end
         end
@@ -1063,14 +1209,10 @@ function H:TogglePullMob(enemyIdx, cloneIdx, add)
     end
 
     if self:IsModernMDT() then
-        local mdtFrame = rawget(_G, "MDTFrame")
-        local group = mdtFrame and mdtFrame.sidePanel and mdtFrame.sidePanel.WidgetGroup
-        local dropdown = group and group.PresetDropDown
         local db = self:GetMDTDB()
-        if dropdown and dropdown.Fire and db and db.currentPreset then
-            -- Modern pull data comes from rendered portraits. Redraw MDT first
-            -- or the helper would immediately read the old enemy quantities.
-            dropdown:Fire("OnValueChanged", db.currentPreset[db.currentDungeonIdx])
+        -- Modern pull data comes from MDT's rendered pull list. Redraw MDT first
+        -- or the helper would immediately read the old enemy quantities.
+        if db and db.currentPreset and self:SelectModernPreset(db.currentPreset[db.currentDungeonIdx]) then
             C_Timer.After(0.2, RebuildEditedPulls)
             return
         end
@@ -1395,10 +1537,7 @@ function H:ImportModernPreset(preset)
     local db = self:GetMDTDB()
     local dungeonIdx = preset.value.currentDungeonIdx
     local presets = db and db.presets and db.presets[dungeonIdx]
-    local mdtFrame = rawget(_G, "MDTFrame")
-    local group = mdtFrame and mdtFrame.sidePanel and mdtFrame.sidePanel.WidgetGroup
-    local dropdown = group and group.PresetDropDown
-    if type(presets) ~= "table" or not db.currentPreset or not dropdown or not dropdown.Fire then
+    if type(presets) ~= "table" or not db.currentPreset or not self:CanSelectModernPreset() then
         return false
     end
     if not SelectModernDungeon(dungeonIdx) then return false end
@@ -1426,13 +1565,10 @@ function H:ImportModernPreset(preset)
     db.currentPreset[dungeonIdx] = presetIdx
     self._modernExpectedDungeonIdx = dungeonIdx
 
-    -- Refresh through the same exposed dropdown callback used by a player.
+    -- Refresh through the same exposed route list callback used by a player.
     -- It invokes MDT's own map/pull normalization and rendering.
-    local labels = {}
-    for idx, existing in pairs(presets) do labels[idx] = existing.text end
-    if dropdown.SetList then dropdown:SetList(labels) end
-    if dropdown.SetValue then dropdown:SetValue(presetIdx) end
-    dropdown:Fire("OnValueChanged", presetIdx)
+    self:RefreshModernPresetList()
+    self:SelectModernPreset(presetIdx)
     C_Timer.After(0.2, function() H:BuildRoute() end)
     return true
 end
@@ -1493,25 +1629,35 @@ function H:OnMDTPresetReceived(prefix, message, distribution, sender)
     end
 end
 
+local function OnModernPresetChanged()
+    C_Timer.After(0.1, function()
+        local preset = H:GetCurrentMDTPreset()
+        if preset ~= H._observedMDTPreset then
+            H._observedMDTPreset = preset
+            if H.activeDungeon or H.db.mapPopout then H:BuildRoute() end
+        end
+    end)
+end
+
 function H:HookModernPresetChanges()
     if not self:IsModernMDT() then return false end
-    if self._modernPresetDropdownHooked then return true end
-    local mdtFrame = rawget(_G, "MDTFrame")
-    local group = mdtFrame and mdtFrame.sidePanel and mdtFrame.sidePanel.WidgetGroup
-    local dropdown = group and group.PresetDropDown
+    if self._modernPresetChangesHooked then return true end
+
+    -- MDT 6.3.10+ announces route switches, imports and deletes publicly.
+    local api = self:GetMDTAPI()
+    if api.RegisterRouteChangedCallback then
+        self._modernPresetChangesHooked = true
+        self._observedMDTPreset = self:GetCurrentMDTPreset()
+        api:RegisterRouteChangedCallback(OnModernPresetChanged)
+        return true
+    end
+
+    local dropdown = GetModernPresetDropdown()
     if not dropdown or not dropdown.SetValue then return false end
 
-    self._modernPresetDropdownHooked = true
+    self._modernPresetChangesHooked = true
     self._observedMDTPreset = self:GetCurrentMDTPreset()
-    hooksecurefunc(dropdown, "SetValue", function()
-        C_Timer.After(0.1, function()
-            local preset = H:GetCurrentMDTPreset()
-            if preset ~= H._observedMDTPreset then
-                H._observedMDTPreset = preset
-                if H.activeDungeon or H.db.mapPopout then H:BuildRoute() end
-            end
-        end)
-    end)
+    hooksecurefunc(dropdown, "SetValue", OnModernPresetChanged)
     return true
 end
 

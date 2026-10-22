@@ -181,31 +181,11 @@ function H:SelectBundledRoute(dungeonIdx)
             if legacy.UpdateMap then pcall(legacy.UpdateMap, legacy) end
         else
             -- Modern MDT keeps its implementation private, but its visible
-            -- AceGUI dropdown exposes the same callback used by a player click.
-            local frame = rawget(_G, "MDTFrame")
-            local group = frame and frame.sidePanel and frame.sidePanel.WidgetGroup
-            local dropdown = group and group.PresetDropDown
-            if dropdown then
-                if dropdown.SetValue then dropdown:SetValue(presetIdx) end
-                if dropdown.Fire then dropdown:Fire("OnValueChanged", presetIdx) end
-            end
+            -- route list exposes the same callback used by a player click.
+            self:SelectModernPreset(presetIdx)
         end
     end
     return true, true
-end
-
-local function RefreshPresetList(db)
-    local legacy = rawget(_G, "MDT")
-    local frame = rawget(_G, "MDTFrame") or (legacy and legacy.main_frame)
-    local group = frame and frame.sidePanel and frame.sidePanel.WidgetGroup
-    local dropdown = group and group.PresetDropDown
-    local presets = db.presets[db.currentDungeonIdx]
-    if not dropdown or not presets then return end
-    local labels = {}
-    for idx, preset in pairs(presets) do labels[idx] = preset.text end
-    if dropdown.SetList then dropdown:SetList(labels) end
-    -- Updating the labels must not fire a selection callback or reset a run.
-    if dropdown.SetValue then dropdown:SetValue(db.currentPreset[db.currentDungeonIdx]) end
 end
 
 function H:SeedBundledRoutes(force, silent)
@@ -237,7 +217,7 @@ function H:SeedBundledRoutes(force, silent)
     end
 
     if added > 0 then
-        RefreshPresetList(mdtDB)
+        self:RefreshModernPresetList()
         if not silent then
             print((L["|cff00ccffMDTHelper|r: Added %d bundled community routes to MDT; existing routes were unchanged."]):format(added))
         end
@@ -261,7 +241,7 @@ function H:ImportBundledRoutes()
                 print(L["|cff00ccffMDTHelper|r: Could not load MDT routes. Enable MDT's UI addon and try importing again."])
                 return
             end
-            RefreshPresetList(H:GetMDTDB())
+            H:RefreshModernPresetList()
             -- Earlier polling passes may already have added some of the routes.
             local existing = math.max(0, present + added - totalAdded)
             print((L["|cff00ccffMDTHelper|r: Bundled routes: %d imported, %d already present, %d unavailable. Your selected route is unchanged."]):format(totalAdded, existing, unavailable))
