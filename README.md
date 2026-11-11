@@ -10,7 +10,7 @@ A forces progress bar at the top tracks your overall enemy forces completion.
 
 ## Features
 
-- **Auto-detection** — activates when you enter a Mythic+ dungeon, hides outside instances
+- **Auto-detection** — activates only when you enter a Mythic or Mythic+ dungeon, hides in Normal, Heroic, Timewalking, Follower and other instances. Enable **Show in Non-Mythic Dungeons** in settings to use it there too.
 - **Auto-advance** — defaults to 100% of each pull's expected forces; boss pulls also require a boss kill. Adjust **Pull Accuracy** for a margin of error, or disable auto-advance via the header button or settings when going off route and navigate manually. Existing saved accuracy settings are preserved.
 - **Expanded current pull** — the active pull shows detailed mob info with NPC portraits
 - **Compact mode** — keep the current pull collapsed to a highlighted portrait row via **Compact Mode** in settings or `/mdth compact`; also works in minimized mode

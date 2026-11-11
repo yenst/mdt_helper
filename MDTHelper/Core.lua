@@ -446,7 +446,7 @@ H.totalForcesRequired = 0
 H.activeDungeon = false
 H.completedCriteria = {}
 H.keyCompleted = false
-H.db = { enabled = true, locked = false, minimized = false, compactMode = false, mapOnly = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 1, mapEditPulls = true }
+H.db = { enabled = true, locked = false, minimized = false, compactMode = false, mapOnly = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 1, mapEditPulls = true, showNonMythic = false }
 H.inCombat = false
 H.combatForcesSnapshot = 0
 H.livePullPercent = 0
@@ -474,6 +474,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.mapShowSurround == nil then MDTHelperDB.mapShowSurround = true end
         if MDTHelperDB.mapFullRoute == nil then MDTHelperDB.mapFullRoute = false end
         if MDTHelperDB.mapEditPulls == nil then MDTHelperDB.mapEditPulls = true end
+        if MDTHelperDB.showNonMythic == nil then MDTHelperDB.showNonMythic = false end
         if MDTHelperDB.forcesOverlay == nil then MDTHelperDB.forcesOverlay = true end
         if MDTHelperDB.forcesPosition == nil then MDTHelperDB.forcesPosition = "RIGHT" end
         if MDTHelperDB.forcesTooltip == nil then MDTHelperDB.forcesTooltip = true end
@@ -707,10 +708,42 @@ end
 ------------------------------------------------------------------------
 -- Instance detection
 ------------------------------------------------------------------------
+
+-- Only Mythic and Mythic+ dungeon runs activate by default. Normal, Heroic,
+-- Timewalking, Follower and other party instances share the same instance
+-- type but must not activate unless the player enables ShowNonMythic.
+local MYTHIC_DUNGEON_DIFFICULTIES = {
+    [8] = true,  -- Mythic Keystone (M+)
+    [23] = true, -- Mythic
+}
+
+function H:IsMythicDungeon()
+    local _, instanceType, difficultyID = GetInstanceInfo()
+    if instanceType ~= "party" then return false end
+    if MYTHIC_DUNGEON_DIFFICULTIES[difficultyID] then return true end
+
+    -- Treat an active challenge run as Mythic+ even if the client reports an
+    -- unexpected difficulty ID during the transition into the key.
+    if C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive then
+        local ok, active = pcall(C_ChallengeMode.IsChallengeModeActive)
+        if ok and active then return true end
+    end
+    return false
+end
+
+-- Whether the route guide should activate for the current instance. Mythic and
+-- Mythic+ always qualify; other party dungeons only when the player opts in.
+function H:IsTrackedDungeon()
+    if self:IsMythicDungeon() then return true end
+    if not (self.db and self.db.showNonMythic) then return false end
+    local _, instanceType = GetInstanceInfo()
+    return instanceType == "party"
+end
+
 function H:CheckInstance()
-    local _, instanceType, _, _, _, _, _, instanceID = GetInstanceInfo()
+    local _, _, _, _, _, _, _, instanceID = GetInstanceInfo()
     -- Garrisons can report "party" while IsInInstance() is false.
-    if IsInInstance() and instanceType == "party" then
+    if IsInInstance() and self:IsTrackedDungeon() then
         local newInstance = self._lastInstanceID ~= instanceID
         self._lastInstanceID = instanceID
         self.activeDungeon = true

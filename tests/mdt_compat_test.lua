@@ -169,10 +169,10 @@ local function test(name, run)
     realPrint("PASS " .. name)
 end
 
-local function setInstance(inInstance, instanceType, instanceID)
+local function setInstance(inInstance, instanceType, instanceID, difficultyID)
     _G.IsInInstance = function() return inInstance, instanceType end
     _G.GetInstanceInfo = function()
-        return "Localized Dungeon", instanceType, 0, "", 5, 0, false, instanceID
+        return "Localized Dungeon", instanceType, difficultyID or 23, "", 5, 0, false, instanceID
     end
 end
 
@@ -228,6 +228,51 @@ test("raid and scenario instances do not activate the dungeon guide", function()
         H:CheckInstance()
         assert(not H.activeDungeon and not H.db.mapPopout and s.rebuilds == 0)
     end
+end)
+
+test("non-mythic party dungeons do not activate the dungeon guide", function()
+    -- Normal (1), Heroic (2), Timewalking (24) and Follower (205) dungeons.
+    for _, difficultyID in ipairs({ 1, 2, 24, 205 }) do
+        local s, H = setup()
+        setInstance(true, "party", 1234, difficultyID)
+        H:CheckInstance()
+        assert(not H.activeDungeon and not H.db.mapPopout and s.rebuilds == 0)
+    end
+end)
+
+test("show in non-mythic dungeons option activates other party dungeons", function()
+    local s, H = setup()
+    assert(H.db.showNonMythic == false)
+    H.db.showNonMythic = true
+    setInstance(true, "party", 1234, 1)
+    H:CheckInstance()
+    assert(H.activeDungeon and H.db.mapPopout and s.rebuilds == 1)
+    H.db.showNonMythic = false
+    H:CheckInstance()
+    assert(not H.activeDungeon and not H.db.mapPopout)
+    -- The option only applies to dungeons, never raids or scenarios.
+    H.db.showNonMythic = true
+    setInstance(true, "raid", 1234, 16)
+    H:CheckInstance()
+    assert(not H.activeDungeon)
+end)
+
+test("mythic and mythic keystone dungeons activate the dungeon guide", function()
+    for _, difficultyID in ipairs({ 23, 8 }) do
+        local s, H = setup()
+        setInstance(true, "party", 1234, difficultyID)
+        H:CheckInstance()
+        assert(H.activeDungeon and H.db.mapPopout and s.rebuilds == 1)
+    end
+end)
+
+test("an active challenge run activates even with an unexpected difficulty", function()
+    local s, H = setup()
+    _G.C_ChallengeMode = { IsChallengeModeActive = function() return true end }
+    setInstance(true, "party", 1234, 1)
+    H:CheckInstance()
+    _G.C_ChallengeMode = nil
+    assert(H.activeDungeon and H.db.mapPopout and s.rebuilds == 1)
 end)
 
 test("modern share works without the removed MDT global", function()

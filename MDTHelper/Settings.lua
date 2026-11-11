@@ -248,6 +248,14 @@ MakeCheckbox(L["Map Only"],
     function(v) H:SetMapOnly(v) end,
     L["Show only the dungeon map window. Pull tracking continues in the background."])
 
+MakeCheckbox(L["Show in Non-Mythic Dungeons"],
+    function() return H.db.showNonMythic end,
+    function(v)
+        H.db.showNonMythic = v
+        if H.CheckInstance then H:CheckInstance() end
+    end,
+    L["Also show the route guide in Normal, Heroic, Timewalking, and Follower dungeons."])
+
 ------------------------------------------------------------------------
 -- Sliders
 ------------------------------------------------------------------------
