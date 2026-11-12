@@ -446,7 +446,7 @@ H.totalForcesRequired = 0
 H.activeDungeon = false
 H.completedCriteria = {}
 H.keyCompleted = false
-H.db = { enabled = true, locked = false, minimized = false, compactMode = false, mapOnly = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 1, mapEditPulls = true }
+H.db = { enabled = true, locked = false, minimized = false, compactMode = false, mapOnly = false, bgAlpha = 1, autoImport = true, autoAdvance = true, frameHeight = nil, pullThreshold = 1, mapEditPulls = true, showNonMythic = false, roleTank = true, roleHealer = true, roleDps = true }
 H.inCombat = false
 H.combatForcesSnapshot = 0
 H.livePullPercent = 0
@@ -474,6 +474,10 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         if MDTHelperDB.mapShowSurround == nil then MDTHelperDB.mapShowSurround = true end
         if MDTHelperDB.mapFullRoute == nil then MDTHelperDB.mapFullRoute = false end
         if MDTHelperDB.mapEditPulls == nil then MDTHelperDB.mapEditPulls = true end
+        if MDTHelperDB.showNonMythic == nil then MDTHelperDB.showNonMythic = false end
+        if MDTHelperDB.roleTank == nil then MDTHelperDB.roleTank = true end
+        if MDTHelperDB.roleHealer == nil then MDTHelperDB.roleHealer = true end
+        if MDTHelperDB.roleDps == nil then MDTHelperDB.roleDps = true end
         if MDTHelperDB.forcesOverlay == nil then MDTHelperDB.forcesOverlay = true end
         if MDTHelperDB.forcesPosition == nil then MDTHelperDB.forcesPosition = "RIGHT" end
         if MDTHelperDB.forcesTooltip == nil then MDTHelperDB.forcesTooltip = true end
@@ -484,10 +488,14 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         H:HookMDTComm()
         frame:RegisterEvent("PLAYER_ENTERING_WORLD")
         frame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+        frame:RegisterEvent("PLAYER_ROLES_ASSIGNED")
+        frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
         frame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
         frame:UnregisterEvent("ADDON_LOADED")
     elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
         H:HookMDTComm()
+        H:CheckInstance()
+    elseif event == "PLAYER_ROLES_ASSIGNED" or event == "PLAYER_SPECIALIZATION_CHANGED" then
         H:CheckInstance()
     elseif event == "CHALLENGE_MODE_COMPLETED" then
         H:OnKeyCompleted()
@@ -707,10 +715,66 @@ end
 ------------------------------------------------------------------------
 -- Instance detection
 ------------------------------------------------------------------------
+
+-- Only Mythic and Mythic+ dungeon runs activate by default. Normal, Heroic,
+-- Timewalking, Follower and other party instances share the same instance
+-- type but must not activate unless the player enables ShowNonMythic.
+local MYTHIC_DUNGEON_DIFFICULTIES = {
+    [8] = true,  -- Mythic Keystone (M+)
+    [23] = true, -- Mythic
+}
+
+function H:IsMythicDungeon()
+    local _, instanceType, difficultyID = GetInstanceInfo()
+    if instanceType ~= "party" then return false end
+    if MYTHIC_DUNGEON_DIFFICULTIES[difficultyID] then return true end
+
+    -- Treat an active challenge run as Mythic+ even if the client reports an
+    -- unexpected difficulty ID during the transition into the key.
+    if C_ChallengeMode and C_ChallengeMode.IsChallengeModeActive then
+        local ok, active = pcall(C_ChallengeMode.IsChallengeModeActive)
+        if ok and active then return true end
+    end
+    return false
+end
+
+-- Group role -> setting that controls whether that role loads the addon.
+local ROLE_SETTINGS = {
+    TANK = "roleTank",
+    HEALER = "roleHealer",
+    DAMAGER = "roleDps",
+}
+
+-- Whether the player's current role is allowed to load the addon in an
+-- instance. Prefer the assigned group role, then fall back to the current
+-- specialization's role (manual groups often leave roles unassigned). When
+-- neither is available the addon always loads.
+function H:IsRoleEnabled()
+    if not self.db then return true end
+    local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned("player")
+    if (not role or role == "NONE") and GetSpecialization and GetSpecializationRole then
+        local spec = GetSpecialization()
+        role = spec and GetSpecializationRole(spec) or role
+    end
+    local setting = role and ROLE_SETTINGS[role]
+    return not setting or self.db[setting] ~= false
+end
+
+-- Whether the route guide should activate for the current instance. Mythic and
+-- Mythic+ always qualify; other party dungeons only when the player opts in.
+-- The player's group role must also be enabled in the settings.
+function H:IsTrackedDungeon()
+    if not self:IsRoleEnabled() then return false end
+    if self:IsMythicDungeon() then return true end
+    if not (self.db and self.db.showNonMythic) then return false end
+    local _, instanceType = GetInstanceInfo()
+    return instanceType == "party"
+end
+
 function H:CheckInstance()
-    local _, instanceType, _, _, _, _, _, instanceID = GetInstanceInfo()
+    local _, _, _, _, _, _, _, instanceID = GetInstanceInfo()
     -- Garrisons can report "party" while IsInInstance() is false.
-    if IsInInstance() and instanceType == "party" then
+    if IsInInstance() and self:IsTrackedDungeon() then
         local newInstance = self._lastInstanceID ~= instanceID
         self._lastInstanceID = instanceID
         self.activeDungeon = true
