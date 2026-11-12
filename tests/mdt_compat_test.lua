@@ -45,6 +45,7 @@ local function setup()
     _G.MDTFrame = nil
     _G.MDTHelperDB = nil
     _G.SlashCmdList = {}
+    _G.UnitGroupRolesAssigned = nil
     _G.CreateFrame = newFrame
     _G.print = function(message) state.messages[#state.messages + 1] = message end
     _G.strlower = string.lower
@@ -255,6 +256,36 @@ test("show in non-mythic dungeons option activates other party dungeons", functi
     setInstance(true, "raid", 1234, 16)
     H:CheckInstance()
     assert(not H.activeDungeon)
+end)
+
+test("role settings gate the dungeon guide", function()
+    local s, H = setup()
+    assert(H.db.roleTank and H.db.roleHealer and H.db.roleDps)
+    setInstance(true, "party", 1234)
+    _G.UnitGroupRolesAssigned = function() return "HEALER" end
+    H.db.roleHealer = false
+    H:CheckInstance()
+    assert(not H.activeDungeon and not H.db.mapPopout and s.rebuilds == 0)
+    H.db.roleHealer = true
+    H:CheckInstance()
+    assert(H.activeDungeon and H.db.mapPopout and s.rebuilds == 1)
+    _G.UnitGroupRolesAssigned = function() return "DAMAGER" end
+    H.db.roleDps = false
+    H:CheckInstance()
+    assert(not H.activeDungeon and not H.db.mapPopout)
+    -- An unassigned group role falls back to the specialization role.
+    _G.UnitGroupRolesAssigned = function() return "NONE" end
+    _G.GetSpecialization = function() return 1 end
+    _G.GetSpecializationRole = function() return "HEALER" end
+    H.db.roleHealer = false
+    H:CheckInstance()
+    assert(not H.activeDungeon and not H.db.mapPopout)
+    -- With no role information at all the addon always loads.
+    H.db.roleHealer = true
+    _G.GetSpecialization = nil
+    _G.GetSpecializationRole = nil
+    H:CheckInstance()
+    assert(H.activeDungeon and H.db.mapPopout)
 end)
 
 test("mythic and mythic keystone dungeons activate the dungeon guide", function()

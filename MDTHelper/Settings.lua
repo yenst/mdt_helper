@@ -72,6 +72,36 @@ local function MakeCheckboxPair(lbl1, get1, set1, tip1, lbl2, get2, set2, tip2)
     return cb1, cb2
 end
 
+-- Three checkboxes on one row (left + middle + right columns)
+local function MakeCheckboxTriple(lbl1, get1, set1, tip1, lbl2, get2, set2, tip2, lbl3, get3, set3, tip3)
+    local cb1 = MakeCheckbox(lbl1, get1, set1, tip1)
+
+    local function AddCheckbox(label, getFunc, setFunc, tooltip, xOffset)
+        local cb = CreateFrame("CheckButton", nil, optionsFrame, "UICheckButtonTemplate")
+        cb:SetPoint("LEFT", cb1, "LEFT", xOffset, 0)
+        cb:SetScript("OnShow", function(self) self:SetChecked(getFunc()) end)
+        cb:SetScript("OnClick", function(self) setFunc(self:GetChecked()) end)
+
+        local text = cb:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        text:SetPoint("LEFT", cb, "RIGHT", 4, 1)
+        text:SetText(label)
+
+        if tooltip then
+            cb:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(label, 1, 1, 1)
+                GameTooltip:AddLine(tooltip, nil, nil, nil, true)
+                GameTooltip:Show()
+            end)
+            cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        end
+    end
+
+    AddCheckbox(lbl2, get2, set2, tip2, 130)
+    AddCheckbox(lbl3, get3, set3, tip3, 260)
+    return cb1
+end
+
 local function MakeSlider(label, min, max, step, fmtFunc, getFunc, setFunc, tooltip)
     local lbl = optionsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
     lbl:SetPoint("TOPLEFT", lastWidget, "BOTTOMLEFT", lastWidget == version and 0 or 2, -6)
@@ -255,6 +285,34 @@ MakeCheckbox(L["Show in Non-Mythic Dungeons"],
         if H.CheckInstance then H:CheckInstance() end
     end,
     L["Also show the route guide in Normal, Heroic, Timewalking, and Follower dungeons."])
+
+local roleHeader = optionsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+roleHeader:SetPoint("TOPLEFT", lastWidget, "BOTTOMLEFT", 2, -6)
+roleHeader:SetText(L["Load by Role"])
+lastWidget = roleHeader
+
+MakeCheckboxTriple(
+    L["Tank"],
+    function() return H.db.roleTank end,
+    function(v)
+        H.db.roleTank = v
+        if H.CheckInstance then H:CheckInstance() end
+    end,
+    L["Show the addon in instances when your role is Tank. Uses your group role, or your specialization when no group role is assigned."],
+    L["Healer"],
+    function() return H.db.roleHealer end,
+    function(v)
+        H.db.roleHealer = v
+        if H.CheckInstance then H:CheckInstance() end
+    end,
+    L["Show the addon in instances when your role is Healer. Uses your group role, or your specialization when no group role is assigned."],
+    L["DPS"],
+    function() return H.db.roleDps end,
+    function(v)
+        H.db.roleDps = v
+        if H.CheckInstance then H:CheckInstance() end
+    end,
+    L["Show the addon in instances when your role is DPS. Uses your group role, or your specialization when no group role is assigned."])
 
 ------------------------------------------------------------------------
 -- Sliders
