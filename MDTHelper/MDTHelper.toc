@@ -3,7 +3,7 @@
 ## Notes: Live route guide for MDT dungeon routes
 ## Notes-zhCN: MDT 地下城路线实时指引
 ## Author: MDTHelper
-## Version: 10.1.0
+## Version: 10.1.1
 ## X-Curse-Project-ID: 1465783
 ## Dependencies: MythicDungeonTools
 ## OptionalDeps: MDT_Legacy
