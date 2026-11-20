@@ -1,0 +1,50 @@
+# Push a tag like v10.1.0 to release: runs the tests, builds the addon zip
+# with the BigWigs packager and uploads it to CurseForge (project ID from the
+# .toc's X-Curse-Project-ID) and to a GitHub release.
+# Needs the repo secret CF_API_KEY (Settings > Secrets and variables > Actions).
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      CF_API_KEY: ${{ secrets.CF_API_KEY }}
+      GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check release setup
+        run: |
+          toc="MDTHelper/MDTHelper.toc"
+          if [ -z "$CF_API_KEY" ]; then
+            echo "::error::The CF_API_KEY secret is missing, so nothing would reach CurseForge."
+            exit 1
+          fi
+          if ! grep -qE '^## X-Curse-Project-ID: *[0-9]+' "$toc"; then
+            echo "::error::$toc has no '## X-Curse-Project-ID: <id>' line."
+            exit 1
+          fi
+          # The .toc carries a fixed version; it must match the tag.
+          toc_version=$(grep -m1 '^## Version:' "$toc" | sed 's/^## Version: *//; s/\r$//')
+          if [ "v$toc_version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match the .toc version $toc_version."
+            exit 1
+          fi
+
+      - name: Run tests
+        run: |
+          sudo apt-get install -y lua5.1 >/dev/null
+          for f in MDTHelper/*.lua; do luac5.1 -p "$f"; done
+          for t in tests/*_test.lua; do echo "== $t"; lua5.1 "$t"; done
+
+      - name: Package and upload
+        uses: BigWigsMods/packager@v2

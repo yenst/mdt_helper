@@ -1,0 +1,20 @@
+# BigWigs packager config (used by .github/workflows/release.yml).
+# The addon lives in MDTHelper/; move it to the zip root and leave the repo
+# tooling, tests, notes and old release zips out.
+package-as: MDTHelper
+
+move-folders:
+  MDTHelper/MDTHelper: MDTHelper
+
+ignore:
+  - tests
+  - scripts
+  - backups
+  - "*.zip"
+  - README.md
+  - CLAUDE.md
+  - CURSEFORGE.md
+  - NAMEPLATE_NOTES.md
+  - RELEASE_NOTES_*.md
+
+enable-nolib-creation: no
